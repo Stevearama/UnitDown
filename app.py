@@ -326,6 +326,9 @@ def render_header() -> None:
     """Render the page title and red rule in Economist style."""
     st.markdown(
         """
+        <style>
+        [data-testid="stToolbarActions"] {display: none;}
+        </style>
         <h1 style='font-family:"Arial Black",Arial,sans-serif;
                    color:#000000; margin-bottom:2px; font-size:2rem;'>
             Offline Capacity Monitor
