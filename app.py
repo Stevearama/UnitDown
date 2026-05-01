@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import plotly.graph_objects as go
 import pandas as pd
 
@@ -354,6 +355,22 @@ def render_metrics(df: pd.DataFrame) -> None:
 # Main
 # ---------------------------------------------------------------------------
 
+def inject_ga() -> None:
+    """Inject the Google Analytics 4 tracking tag."""
+    components.html(
+        """
+        <script async src="https://www.googletagmanager.com/gtag/js?id=G-Q31W8YZT78"></script>
+        <script>
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-Q31W8YZT78');
+        </script>
+        """,
+        height=0,
+    )
+
+
 def main() -> None:
     """Assemble and run the full Streamlit dashboard."""
     st.set_page_config(page_title="Offline Capacity Monitor", layout="wide")
@@ -361,6 +378,7 @@ def main() -> None:
     if not check_password():
         st.stop()
 
+    inject_ga()
     render_header()
 
     df = get_data()
