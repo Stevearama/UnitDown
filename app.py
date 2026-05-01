@@ -83,7 +83,17 @@ def check_password() -> bool:
 
 @st.cache_data
 def get_data() -> pd.DataFrame:
-    """Load and cache the offline events dataset (runs once per session)."""
+    """Load and cache the offline events dataset.
+
+    On Streamlit Cloud, downloads the CSV from Google Drive using the file ID
+    stored in secrets. Locally, falls back to reading 'Offline Event.csv'.
+    """
+    file_id = st.secrets.get("gdrive_file_id", None)
+    if file_id:
+        import gdown, os, tempfile
+        tmp_path = os.path.join(tempfile.gettempdir(), "offline_event.csv")
+        gdown.download(f"https://drive.google.com/uc?id={file_id}", tmp_path, quiet=True)
+        return load_offline_events(tmp_path)
     return load_offline_events()
 
 # ---------------------------------------------------------------------------

@@ -5,3 +5,4 @@ __pycache__/
 .claude/
 *.log
 .streamlit/secrets.toml
+*.csv
