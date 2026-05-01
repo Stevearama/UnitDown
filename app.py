@@ -1,0 +1,369 @@
+import streamlit as st
+import plotly.graph_objects as go
+import pandas as pd
+
+from data_import import load_offline_events
+from chart_data import build_seasonality_data
+
+# ---------------------------------------------------------------------------
+# Constants
+# ---------------------------------------------------------------------------
+
+# High-contrast palette — all clearly visible on a white background
+PALETTE = [
+    "#0047AB",  # cobalt blue
+    "#CC0000",  # red
+    "#00827F",  # teal
+    "#E65C00",  # orange
+    "#5C2D91",  # purple
+    "#2E7D32",  # dark green
+    "#8B4513",  # saddle brown
+    "#1A237E",  # navy
+]
+
+COLUMN_LABELS = {
+    "UNIT_ID":            "Unit ID",
+    "OWNER_NAME":         "Owner",
+    "PLANT_ID":           "Plant ID",
+    "PLANT_NAME":         "Plant",
+    "COUNTRY":            "Country",
+    "MARKET_REG":         "Market Region",
+    "WORLD_REG":          "World Region",
+    "U_STATUS":           "Status",
+    "U_CAPACITY":         "Unit Capacity",
+    "CAP_OFFLINE":        "Capacity Offline",
+    "CAP_UOM":            "Unit of Measure",
+    "DERATE":             "Derate (%)",
+    "START_DATE":         "Start Date",
+    "END_DATE":           "End Date",
+    "EVENT_TYPE":         "Event Type",
+    "E_CAUSE":            "Cause",
+    "E_STATUS_RESEARCH":  "Research Status",
+    "UTYPE_DESC":         "Unit Type",
+    "PADD_REG":           "Region",
+    "LATITUDE":           "Latitude",
+    "LONGITUDE":          "Longitude",
+}
+
+# Columns kept in the DataFrame but hidden from every display table
+DISPLAY_HIDDEN = {"UNIT_ID", "PLANT_ID", "U_STATUS", "LATITUDE", "LONGITUDE"}
+
+# ---------------------------------------------------------------------------
+# Data
+# ---------------------------------------------------------------------------
+
+@st.cache_data
+def get_data() -> pd.DataFrame:
+    """Load and cache the offline events dataset (runs once per session)."""
+    return load_offline_events()
+
+# ---------------------------------------------------------------------------
+# Filters
+# ---------------------------------------------------------------------------
+
+def render_multiselect(label: str, options: list, key: str, default: list = None) -> list:
+    """Render a sidebar multiselect; an empty selection means 'include all'."""
+    sorted_opts = sorted([o for o in options if o])
+    valid_default = [d for d in (default or []) if d in sorted_opts]
+    return st.sidebar.multiselect(label, sorted_opts, default=valid_default, key=key)
+
+
+def collect_filters(df: pd.DataFrame) -> dict:
+    """Render all sidebar filter widgets and return {column: selected_values}."""
+    st.sidebar.header("Filters")
+    st.sidebar.caption("Leave a multiselect empty to include all values.")
+
+    event_choice = st.sidebar.radio(
+        "Event type", ["Planned", "Unplanned", "Both"], horizontal=True, index=2
+    )
+    st.sidebar.divider()
+
+    available_years = sorted(df["START_DATE"].dropna().dt.year.unique().astype(int))
+    cur = pd.Timestamp.today().year
+    default_years = [cur - 3, cur - 2, cur - 1, cur, cur + 1]
+
+    year = render_multiselect("Year", available_years, "year", default=default_years)
+    df1 = df[df["START_DATE"].dt.year.isin(year)] if year else df
+
+    world_reg = render_multiselect("World Region", df1["WORLD_REG"].dropna().unique(), "world_reg", default=["North America"])
+    df2 = df1[df1["WORLD_REG"].isin(world_reg)] if world_reg else df1
+
+    country = render_multiselect("Country", df2["COUNTRY"].dropna().unique(), "country", default=["U.S.A."])
+    df3 = df2[df2["COUNTRY"].isin(country)] if country else df2
+
+    padd_reg = render_multiselect("Region", df3["PADD_REG"].dropna().unique(), "padd")
+    df4 = df3[df3["PADD_REG"].isin(padd_reg)] if padd_reg else df3
+
+    utype = render_multiselect("Unit Type", df4["UTYPE_DESC"].dropna().unique(), "utype", default=["CDU"])
+    df5 = df4[df4["UTYPE_DESC"].isin(utype)] if utype else df4
+
+    owner = render_multiselect("Owner", df5["OWNER_NAME"].dropna().unique(), "owner")
+
+    return {
+        "EVENT_TYPE": [] if event_choice == "Both" else [event_choice],
+        "YEAR":       year,
+        "WORLD_REG":  world_reg,
+        "COUNTRY":    country,
+        "PADD_REG":   padd_reg,
+        "UTYPE_DESC": utype,
+        "OWNER_NAME": owner,
+    }
+
+
+def apply_filters(df: pd.DataFrame, filters: dict) -> pd.DataFrame:
+    """Apply only the non-empty filter selections to the DataFrame.
+
+    YEAR is a derived filter — matched against START_DATE.dt.year rather than a column directly.
+    """
+    for col, selected in filters.items():
+        if not selected:
+            continue
+        if col == "YEAR":
+            df = df[df["START_DATE"].dt.year.isin(selected)]
+        else:
+            df = df[df[col].isin(selected)]
+    return df
+
+# ---------------------------------------------------------------------------
+# Chart title
+# ---------------------------------------------------------------------------
+
+def _describe_filter(selected: list, plural: str) -> str:
+    """Return a short label for one filter — the value(s) selected, or 'All <plural>'."""
+    if not selected:
+        return f"All {plural}"
+    if len(selected) == 1:
+        return selected[0]
+    return f"{selected[0]} & {len(selected) - 1} more"
+
+
+def build_chart_title(filters: dict) -> str:
+    """Construct a human-readable chart title that reflects the active filter selections."""
+    unit    = _describe_filter(filters["UTYPE_DESC"], "unit types")
+    country = _describe_filter(filters["COUNTRY"],    "countries")
+    owner   = _describe_filter(filters["OWNER_NAME"], "owners")
+    region  = _describe_filter(filters["PADD_REG"],   "regions")
+    # Strip trailing periods from values (e.g. "U.S.A.") before joining with " · "
+    parts = [p.rstrip(".") for p in [unit, country, owner, region]]
+    return "Offline Capacity for " + "  ·  ".join(parts)
+
+# ---------------------------------------------------------------------------
+# Chart
+# ---------------------------------------------------------------------------
+
+def _add_today_marker(fig: go.Figure) -> None:
+    """Add a vertical dashed line and 'Today' label at the current day-of-year position."""
+    today_plot = pd.Timestamp.today().replace(year=2000).normalize().strftime("%Y-%m-%d")
+    fig.add_vline(
+        x=today_plot,
+        line_dash="dash",
+        line_color="#555555",
+        line_width=1.5,
+    )
+    fig.add_annotation(
+        x=today_plot,
+        y=1.05,
+        yref="paper",
+        text="Today",
+        showarrow=False,
+        font=dict(size=11, color="#555555"),
+        xanchor="center",
+    )
+
+
+def _dominant_uom(df: pd.DataFrame) -> str:
+    """Return the most common unit of measure in the filtered dataset."""
+    mode = df["CAP_UOM"].mode()
+    return mode.iloc[0] if not mode.empty else ""
+
+
+def build_chart(seasonality_df: pd.DataFrame, uom: str) -> go.Figure:
+    """Build an Economist-style seasonality line chart with one line per year."""
+    fig = go.Figure()
+
+    for i, year in enumerate(sorted(seasonality_df["year"].unique())):
+        year_data = seasonality_df[seasonality_df["year"] == year].sort_values("plot_date")
+        fig.add_trace(go.Scatter(
+            x=year_data["plot_date"],
+            y=year_data["CAP_OFFLINE"],
+            mode="lines",
+            name=str(year),
+            line=dict(color=PALETTE[i % len(PALETTE)], width=2),
+            hovertemplate="%{x|%d %b} · %{y:,.0f} " + uom + "<extra>" + str(year) + "</extra>",
+        ))
+
+    fig.update_layout(
+        plot_bgcolor="white",
+        paper_bgcolor="white",
+        # Black text throughout — avoids the light-grey-on-white readability problem
+        font=dict(family="Arial", size=12, color="#000000"),
+        xaxis=dict(
+            tickformat="%b",
+            dtick="M1",
+            showgrid=False,
+            showline=True,
+            linecolor="#000000",
+            linewidth=1.5,
+            ticks="outside",
+            ticklen=5,
+            tickfont=dict(color="#000000", size=12),
+        ),
+        yaxis=dict(
+            title=dict(
+                text=f"Capacity Offline ({uom})" if uom else "Capacity Offline",
+                font=dict(color="#000000"),
+            ),
+            tickfont=dict(color="#000000"),
+            showgrid=True,
+            gridcolor="#E8E8E8",
+            gridwidth=1,
+            showline=False,
+            zeroline=True,
+            zerolinecolor="#BBBBBB",
+            tickformat=",",
+        ),
+        legend=dict(
+            orientation="h",
+            y=-0.15,
+            x=0,
+            title_text="",
+            font=dict(size=11, color="#000000"),
+        ),
+        margin=dict(l=70, r=20, t=40, b=90),
+        hovermode="x",
+    )
+    _add_today_marker(fig)
+    return fig
+
+# ---------------------------------------------------------------------------
+# Event subset helpers
+# ---------------------------------------------------------------------------
+
+def get_active_events(df: pd.DataFrame) -> pd.DataFrame:
+    """Return events that are currently ongoing (started in past, ends in future)."""
+    today = pd.Timestamp.today().normalize()
+    return df[(df["START_DATE"] <= today) & (df["END_DATE"] >= today)]
+
+
+def get_recent_starts(df: pd.DataFrame, days: int = 10) -> pd.DataFrame:
+    """Return events whose start date falls within the last N days."""
+    today = pd.Timestamp.today().normalize()
+    cutoff = today - pd.Timedelta(days=days)
+    return df[(df["START_DATE"] >= cutoff) & (df["START_DATE"] <= today)]
+
+
+def get_recent_ends(df: pd.DataFrame, days: int = 10) -> pd.DataFrame:
+    """Return events whose end date falls within the last N days."""
+    today = pd.Timestamp.today().normalize()
+    cutoff = today - pd.Timedelta(days=days)
+    return df[(df["END_DATE"] >= cutoff) & (df["END_DATE"] <= today)]
+
+# ---------------------------------------------------------------------------
+# Table helpers
+# ---------------------------------------------------------------------------
+
+def prepare_display_table(df: pd.DataFrame) -> pd.DataFrame:
+    """Drop hidden columns, format dates, and rename to human-readable labels for display."""
+    display = df.drop(columns=[c for c in DISPLAY_HIDDEN if c in df.columns]).copy()
+    for col in ("START_DATE", "END_DATE"):
+        if col in display.columns:
+            display[col] = display[col].dt.strftime("%b %d %Y")
+    return display.rename(columns=COLUMN_LABELS).reset_index(drop=True)
+
+
+def render_table(df: pd.DataFrame, empty_msg: str = "No matching events.") -> None:
+    """Render a labelled dataframe or a notice if it is empty."""
+    st.caption(f"{len(df):,} events")
+    if df.empty:
+        st.info(empty_msg)
+    else:
+        st.dataframe(prepare_display_table(df), height=350, hide_index=True)
+
+# ---------------------------------------------------------------------------
+# Layout helpers
+# ---------------------------------------------------------------------------
+
+def render_header() -> None:
+    """Render the page title and red rule in Economist style."""
+    st.markdown(
+        """
+        <h1 style='font-family:"Arial Black",Arial,sans-serif;
+                   color:#000000; margin-bottom:2px; font-size:2rem;'>
+            Offline Capacity Monitor
+        </h1>
+        <p style='color:#555555; font-size:15px; margin-top:0; margin-bottom:10px;'>
+            Daily capacity offline by season and year
+        </p>
+        <hr style='border:none; border-top:3px solid #E3120B; margin-bottom:24px;'>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def render_metrics(df: pd.DataFrame) -> None:
+    """Show headline summary counts for the current filter selection."""
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Events",        f"{len(df):,}")
+    c2.metric("Unique Plants", f"{df['PLANT_NAME'].nunique():,}")
+    c3.metric("Unique Owners", f"{df['OWNER_NAME'].nunique():,}")
+    c4.metric("Countries",     f"{df['COUNTRY'].nunique():,}")
+
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
+
+def main() -> None:
+    """Assemble and run the full Streamlit dashboard."""
+    st.set_page_config(page_title="Offline Capacity Monitor", layout="wide")
+
+    render_header()
+
+    df = get_data()
+
+    filters = collect_filters(df)
+    filtered = apply_filters(df.copy(), filters)
+
+    render_metrics(filtered)
+    st.markdown("---")
+
+    # Seasonality chart
+    if filtered.empty:
+        st.warning("No events match the selected filters.")
+    else:
+        title = build_chart_title(filters)
+        st.markdown(
+            f"<h3 style='font-family:\"Arial Black\",Arial,sans-serif; "
+            f"color:#000000; font-size:1.1rem; margin-bottom:4px;'>{title}</h3>",
+            unsafe_allow_html=True,
+        )
+        uom = _dominant_uom(filtered)
+        seasonality = build_seasonality_data(filtered)
+        fig = build_chart(seasonality, uom)
+        st.plotly_chart(fig)
+
+    st.markdown("---")
+
+    # Tables in tabs
+    tab_active, tab_starts, tab_ends, tab_all = st.tabs([
+        "Active Now",
+        "Started — Last 10 Days",
+        "Ended — Last 10 Days",
+        "All Events",
+    ])
+
+    with tab_active:
+        render_table(get_active_events(filtered), "No currently active events for this selection.")
+
+    with tab_starts:
+        render_table(get_recent_starts(filtered), "No events started in the last 10 days.")
+
+    with tab_ends:
+        render_table(get_recent_ends(filtered), "No events ended in the last 10 days.")
+
+    with tab_all:
+        render_table(filtered, "No events match the selected filters.")
+
+
+
+if __name__ == "__main__":
+    main()
