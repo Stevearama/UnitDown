@@ -49,6 +49,35 @@ COLUMN_LABELS = {
 DISPLAY_HIDDEN = {"UNIT_ID", "PLANT_ID", "U_STATUS", "LATITUDE", "LONGITUDE"}
 
 # ---------------------------------------------------------------------------
+# Authentication
+# ---------------------------------------------------------------------------
+
+def check_password() -> bool:
+    """Show a password prompt and return True once the correct password is entered."""
+    if st.session_state.get("authenticated"):
+        return True
+
+    st.markdown(
+        """
+        <h1 style='font-family:"Arial Black",Arial,sans-serif;
+                   color:#000000; margin-bottom:2px; font-size:2rem;'>
+            Offline Capacity Monitor
+        </h1>
+        <hr style='border:none; border-top:3px solid #E3120B; margin-bottom:24px;'>
+        """,
+        unsafe_allow_html=True,
+    )
+    pwd = st.text_input("Password", type="password")
+    if pwd:
+        if pwd == st.secrets["password"]:
+            st.session_state["authenticated"] = True
+            st.rerun()
+        else:
+            st.error("Incorrect password.")
+    return False
+
+
+# ---------------------------------------------------------------------------
 # Data
 # ---------------------------------------------------------------------------
 
@@ -315,6 +344,9 @@ def render_metrics(df: pd.DataFrame) -> None:
 def main() -> None:
     """Assemble and run the full Streamlit dashboard."""
     st.set_page_config(page_title="Offline Capacity Monitor", layout="wide")
+
+    if not check_password():
+        st.stop()
 
     render_header()
 
