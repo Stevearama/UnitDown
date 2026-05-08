@@ -118,7 +118,7 @@ def collect_filters(df: pd.DataFrame) -> dict:
     )
     st.sidebar.divider()
 
-    available_years = sorted(df["START_DATE"].dropna().dt.year.unique().astype(int))
+    available_years = sorted([y for y in df["START_DATE"].dropna().dt.year.unique().astype(int) if y >= 2021])
     cur = pd.Timestamp.today().year
     default_years = [cur - 3, cur - 2, cur - 1, cur, cur + 1]
 
@@ -159,7 +159,10 @@ def apply_filters(df: pd.DataFrame, filters: dict) -> pd.DataFrame:
         if not selected:
             continue
         if col == "YEAR":
-            df = df[df["START_DATE"].dt.year.isin(selected)]
+            mask = pd.Series(False, index=df.index)
+            for y in selected:
+                mask |= (df["START_DATE"].dt.year <= y) & (df["END_DATE"].dt.year >= y)
+            df = df[mask]
         else:
             df = df[df[col].isin(selected)]
     return df
