@@ -47,7 +47,9 @@ def add_seasonality_columns(daily_totals: pd.DataFrame) -> pd.DataFrame:
 
 def build_seasonality_data(df: pd.DataFrame) -> pd.DataFrame:
     """Full pipeline: event rows -> daily expanded rows -> summed totals -> fill zeros -> seasonality columns."""
+    selected_years = set(df["START_DATE"].dropna().dt.year.unique())
     daily = expand_events_to_daily(df)
+    daily = daily[daily["date"].dt.year.isin(selected_years)]
     totals = compute_daily_totals(daily)
     totals = fill_missing_days(totals)
     return add_seasonality_columns(totals)
