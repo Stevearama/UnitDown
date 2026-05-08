@@ -24,7 +24,10 @@ def fill_missing_days(daily_totals: pd.DataFrame) -> pd.DataFrame:
     """Insert zero-value rows for every calendar day that has no recorded outages."""
     if daily_totals.empty:
         return daily_totals
-    full_range = pd.date_range(daily_totals["date"].min(), daily_totals["date"].max(), freq="D")
+    years = daily_totals["date"].dt.year.unique()
+    full_range = pd.DatetimeIndex(
+        pd.concat([pd.Series(pd.date_range(f"{y}-01-01", f"{y}-12-31", freq="D")) for y in years])
+    )
     return (
         daily_totals
         .set_index("date")
