@@ -403,7 +403,7 @@ def main() -> None:
             unsafe_allow_html=True,
         )
         uom = _dominant_uom(filtered)
-        seasonality = build_seasonality_data(filtered)
+        seasonality = build_seasonality_data(filtered, years=filters["YEAR"] or None)
         fig = build_chart(seasonality, uom)
         st.plotly_chart(fig)
 

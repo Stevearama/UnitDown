@@ -51,10 +51,12 @@ def add_seasonality_columns(daily_totals: pd.DataFrame) -> pd.DataFrame:
 MIN_CHART_DATE = pd.Timestamp("2021-01-01")
 
 
-def build_seasonality_data(df: pd.DataFrame) -> pd.DataFrame:
+def build_seasonality_data(df: pd.DataFrame, years: list = None) -> pd.DataFrame:
     """Full pipeline: event rows -> daily expanded rows -> summed totals -> fill zeros -> seasonality columns."""
-    selected_years = set(df["START_DATE"].dropna().dt.year.unique()) | set(df["END_DATE"].dropna().dt.year.unique())
-    selected_years = {y for y in selected_years if y >= MIN_CHART_DATE.year}
+    if years:
+        selected_years = {y for y in years if y >= MIN_CHART_DATE.year}
+    else:
+        selected_years = {y for y in df["START_DATE"].dropna().dt.year.unique() if y >= MIN_CHART_DATE.year}
     daily = expand_events_to_daily(df)
     daily = daily[daily["date"] >= MIN_CHART_DATE]
     daily = daily[daily["date"].dt.year.isin(selected_years)]
