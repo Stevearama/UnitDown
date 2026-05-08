@@ -82,7 +82,7 @@ def check_password() -> bool:
 # Data
 # ---------------------------------------------------------------------------
 
-@st.cache_data
+@st.cache_data(ttl=21600)
 def get_data() -> pd.DataFrame:
     """Load and cache the offline events dataset.
 
