@@ -108,6 +108,7 @@ def load_units(filepath: str = "units.csv") -> pd.DataFrame:
     df = df[df["U_CAPACITY"] > 0]
     df["STARTUP"] = _parse_dates(df["STARTUP"])
     df["SHUTDOWN"] = _parse_dates(df["SHUTDOWN"])
+    df = df[df["SHUTDOWN"].isna() | (df["SHUTDOWN"] >= "2020-01-01")]
     df = df.rename(columns=COLUMN_RENAME)
     df["UTYPE_DESC"] = df["UTYPE_DESC"].replace(RENAME_UNIT_TYPE)
     df = df[df["UTYPE_DESC"] != "REMOVE"]
