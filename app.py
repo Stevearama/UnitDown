@@ -325,12 +325,16 @@ def build_timeline_chart(timeline_df: pd.DataFrame, uom: str, y_label: str = "Ca
             hovertemplate="%{x|%d %b %Y} · %{y:,.0f} " + uom + "<extra>" + utype + "</extra>",
         ))
 
-    today = pd.Timestamp.today().normalize().strftime("%Y-%m-%d")
+    x_min = timeline_df["date"].min()
+    x_max = timeline_df["date"].max()
+    today = pd.Timestamp.today().normalize()
+
     fig.update_layout(
         plot_bgcolor="white",
         paper_bgcolor="white",
         font=dict(family="Arial", size=12, color="#000000"),
         xaxis=dict(
+            range=[x_min, x_max],
             showgrid=False,
             showline=True,
             linecolor="#000000",
@@ -363,11 +367,14 @@ def build_timeline_chart(timeline_df: pd.DataFrame, uom: str, y_label: str = "Ca
         margin=dict(l=70, r=20, t=40, b=90),
         hovermode="x unified",
     )
-    fig.add_vline(x=today, line_dash="dash", line_color="#555555", line_width=1.5)
-    fig.add_annotation(
-        x=today, y=1.05, yref="paper", text="Today",
-        showarrow=False, font=dict(size=11, color="#555555"), xanchor="center",
-    )
+
+    if x_min <= today <= x_max:
+        today_str = today.strftime("%Y-%m-%d")
+        fig.add_vline(x=today_str, line_dash="dash", line_color="#555555", line_width=1.5)
+        fig.add_annotation(
+            x=today_str, y=1.05, yref="paper", text="Today",
+            showarrow=False, font=dict(size=11, color="#555555"), xanchor="center",
+        )
     return fig
 
 # ---------------------------------------------------------------------------
