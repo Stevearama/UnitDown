@@ -439,19 +439,19 @@ def render_table(df: pd.DataFrame, empty_msg: str = "No matching events.") -> No
 # Layout helpers
 # ---------------------------------------------------------------------------
 
-def render_header() -> None:
+def render_header(title: str, subtitle: str) -> None:
     """Render the page title and red rule in Economist style."""
     st.markdown(
-        """
+        f"""
         <style>
-        [data-testid="stToolbarActions"] {display: none;}
+        [data-testid="stToolbarActions"] {{display: none;}}
         </style>
         <h1 style='font-family:"Arial Black",Arial,sans-serif;
                    color:#000000; margin-bottom:2px; font-size:2rem;'>
-            Offline Capacity Monitor
+            {title}
         </h1>
         <p style='color:#555555; font-size:15px; margin-top:0; margin-bottom:10px;'>
-            Daily capacity offline by season and year
+            {subtitle}
         </p>
         <hr style='border:none; border-top:3px solid #E3120B; margin-bottom:24px;'>
         """,
@@ -495,18 +495,18 @@ def main() -> None:
         st.stop()
 
     inject_ga()
-    render_header()
+
+    chart_mode = st.radio("View", ["Offline Capacity", "Total Capacity"], horizontal=True, index=0)
+
+    if chart_mode == "Offline Capacity":
+        render_header("Offline Capacity Monitor", "Daily capacity offline by season and year")
+    else:
+        render_header("Total Capacity Monitor", "Total installed capacity by unit type and year")
 
     df = get_data()
 
     filters = collect_filters(df)
     filtered = apply_filters(df.copy(), filters)
-
-    render_metrics(filtered)
-    st.markdown("---")
-
-    # Chart toggle
-    chart_mode = st.radio("View", ["Offline Capacity", "Total Capacity"], horizontal=True, index=0)
 
     if chart_mode == "Offline Capacity":
         if filtered.empty:
