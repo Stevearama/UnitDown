@@ -113,4 +113,6 @@ def load_units(filepath: str = "units.csv") -> pd.DataFrame:
     df["UTYPE_DESC"] = df["UTYPE_DESC"].replace(RENAME_UNIT_TYPE)
     df = df[df["UTYPE_DESC"] != "REMOVE"]
     df["PADD_REG"] = df["PADD_REG"].replace(PADD_RENAME)
+    df.loc[df["CAP_UOM"] == "BBL/d", "U_CAPACITY"] /= 1000
+    df["CAP_UOM"] = df["CAP_UOM"].replace("BBL/d", "kbd")
     return df
