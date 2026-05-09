@@ -56,3 +56,16 @@ def build_capacity_data(df: pd.DataFrame, years: list = None) -> pd.DataFrame:
     result["plot_date"] = result["date"].apply(lambda d: d.replace(year=2000))
 
     return result[result["date"].dt.year.isin(set(selected_years))]
+
+
+def build_capacity_timeline_data(df: pd.DataFrame, years: list = None) -> pd.DataFrame:
+    """Build daily total capacity by unit type for a timeline chart."""
+    frames = []
+    for utype in df["UTYPE_DESC"].unique():
+        cap = build_capacity_data(df[df["UTYPE_DESC"] == utype], years)
+        if not cap.empty:
+            cap["UTYPE_DESC"] = utype
+            frames.append(cap[["date", "UTYPE_DESC", "CAP_OFFLINE"]])
+    if not frames:
+        return pd.DataFrame(columns=["date", "UTYPE_DESC", "CAP_OFFLINE"])
+    return pd.concat(frames, ignore_index=True)

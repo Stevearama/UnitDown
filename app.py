@@ -6,7 +6,8 @@ import pandas as pd
 from data_import import load_offline_events
 from chart_data import build_seasonality_data
 from data_import_capacity import load_units
-from chart_data_capacity import build_capacity_data
+from chart_data_capacity import build_capacity_data, build_capacity_timeline_data
+from chart_data import build_timeline_data
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -299,6 +300,67 @@ def build_chart(seasonality_df: pd.DataFrame, uom: str, y_label: str = "Capacity
     _add_today_marker(fig)
     return fig
 
+
+def build_timeline_chart(timeline_df: pd.DataFrame, uom: str, y_label: str = "Capacity Offline") -> go.Figure:
+    """Build a timeline line chart with one line per unit type and actual dates on the x-axis."""
+    fig = go.Figure()
+
+    for i, utype in enumerate(sorted(timeline_df["UTYPE_DESC"].unique())):
+        data = timeline_df[timeline_df["UTYPE_DESC"] == utype].sort_values("date")
+        fig.add_trace(go.Scatter(
+            x=data["date"],
+            y=data["CAP_OFFLINE"],
+            mode="lines",
+            name=utype,
+            line=dict(color=PALETTE[i % len(PALETTE)], width=2),
+            hovertemplate="%{x|%d %b %Y} · %{y:,.0f} " + uom + "<extra>" + utype + "</extra>",
+        ))
+
+    today = pd.Timestamp.today().normalize().strftime("%Y-%m-%d")
+    fig.update_layout(
+        plot_bgcolor="white",
+        paper_bgcolor="white",
+        font=dict(family="Arial", size=12, color="#000000"),
+        xaxis=dict(
+            showgrid=False,
+            showline=True,
+            linecolor="#000000",
+            linewidth=1.5,
+            ticks="outside",
+            ticklen=5,
+            tickfont=dict(color="#000000", size=12),
+        ),
+        yaxis=dict(
+            title=dict(
+                text=f"{y_label} ({uom})" if uom else y_label,
+                font=dict(color="#000000"),
+            ),
+            tickfont=dict(color="#000000"),
+            showgrid=True,
+            gridcolor="#E8E8E8",
+            gridwidth=1,
+            showline=False,
+            zeroline=True,
+            zerolinecolor="#BBBBBB",
+            tickformat=",",
+        ),
+        legend=dict(
+            orientation="h",
+            y=-0.15,
+            x=0,
+            title_text="",
+            font=dict(size=11, color="#000000"),
+        ),
+        margin=dict(l=70, r=20, t=40, b=90),
+        hovermode="x unified",
+    )
+    fig.add_vline(x=today, line_dash="dash", line_color="#555555", line_width=1.5)
+    fig.add_annotation(
+        x=today, y=1.05, yref="paper", text="Today",
+        showarrow=False, font=dict(size=11, color="#555555"), xanchor="center",
+    )
+    return fig
+
 # ---------------------------------------------------------------------------
 # Event subset helpers
 # ---------------------------------------------------------------------------
@@ -496,7 +558,11 @@ def main() -> None:
 
     inject_ga()
 
-    chart_mode = st.radio("View", ["Offline Capacity", "Total Capacity"], horizontal=True, index=0)
+    col1, col2 = st.columns(2)
+    with col1:
+        chart_mode = st.radio("View", ["Offline Capacity", "Total Capacity"], horizontal=True, index=0)
+    with col2:
+        chart_type = st.radio("Chart type", ["Seasonality", "Timeline"], horizontal=True, index=0)
 
     if chart_mode == "Offline Capacity":
         render_header("Offline Capacity Monitor", "Daily capacity offline by season and year")
@@ -519,8 +585,12 @@ def main() -> None:
                 unsafe_allow_html=True,
             )
             uom = _dominant_uom(filtered)
-            seasonality = build_seasonality_data(filtered, years=filters["YEAR"] or None)
-            fig = build_chart(seasonality, uom, y_label="Capacity Offline")
+            if chart_type == "Seasonality":
+                data = build_seasonality_data(filtered, years=filters["YEAR"] or None)
+                fig = build_chart(data, uom, y_label="Capacity Offline")
+            else:
+                data = build_timeline_data(filtered, years=filters["YEAR"] or None)
+                fig = build_timeline_chart(data, uom, y_label="Capacity Offline")
             st.plotly_chart(fig)
     else:
         units_df = get_capacity_data()
@@ -535,8 +605,12 @@ def main() -> None:
                 unsafe_allow_html=True,
             )
             uom = _dominant_uom(filtered_units)
-            seasonality = build_capacity_data(filtered_units, years=filters["YEAR"] or None)
-            fig = build_chart(seasonality, uom, y_label="Total Capacity")
+            if chart_type == "Seasonality":
+                data = build_capacity_data(filtered_units, years=filters["YEAR"] or None)
+                fig = build_chart(data, uom, y_label="Total Capacity")
+            else:
+                data = build_capacity_timeline_data(filtered_units, years=filters["YEAR"] or None)
+                fig = build_timeline_chart(data, uom, y_label="Total Capacity")
             st.plotly_chart(fig)
 
     st.markdown("---")
