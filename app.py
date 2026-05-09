@@ -137,6 +137,10 @@ def collect_filters(df: pd.DataFrame) -> dict:
     )
     st.sidebar.divider()
 
+    chart_mode = st.sidebar.radio("View", ["Offline Capacity", "Total Capacity"], horizontal=True, index=0)
+    chart_type = st.sidebar.radio("Chart type", ["Seasonality", "Timeline"], horizontal=True, index=0)
+    st.sidebar.divider()
+
     available_years = sorted([y for y in df["START_DATE"].dropna().dt.year.unique().astype(int) if y >= 2021])
     cur = pd.Timestamp.today().year
     default_years = [cur - 3, cur - 2, cur - 1, cur, cur + 1]
@@ -159,14 +163,19 @@ def collect_filters(df: pd.DataFrame) -> dict:
     owner = render_multiselect("Owner", df5["OWNER_NAME"].dropna().unique(), "owner")
 
     return {
-        "EVENT_TYPE": [] if event_choice == "Both" else [event_choice],
-        "YEAR":       year,
-        "WORLD_REG":  world_reg,
-        "COUNTRY":    country,
-        "PADD_REG":   padd_reg,
-        "UTYPE_DESC": utype,
-        "OWNER_NAME": owner,
+        "EVENT_TYPE":  [] if event_choice == "Both" else [event_choice],
+        "YEAR":        year,
+        "WORLD_REG":   world_reg,
+        "COUNTRY":     country,
+        "PADD_REG":    padd_reg,
+        "UTYPE_DESC":  utype,
+        "OWNER_NAME":  owner,
+        "chart_mode":  chart_mode,
+        "chart_type":  chart_type,
     }
+
+
+_NON_DATA_KEYS = {"chart_mode", "chart_type"}
 
 
 def apply_filters(df: pd.DataFrame, filters: dict) -> pd.DataFrame:
@@ -175,7 +184,7 @@ def apply_filters(df: pd.DataFrame, filters: dict) -> pd.DataFrame:
     YEAR is a derived filter — matched against START_DATE.dt.year rather than a column directly.
     """
     for col, selected in filters.items():
-        if not selected:
+        if col in _NON_DATA_KEYS or not selected:
             continue
         if col == "YEAR":
             mask = pd.Series(False, index=df.index)
@@ -558,20 +567,16 @@ def main() -> None:
 
     inject_ga()
 
-    col1, col2 = st.columns(2)
-    with col1:
-        chart_mode = st.radio("View", ["Offline Capacity", "Total Capacity"], horizontal=True, index=0)
-    with col2:
-        chart_type = st.radio("Chart type", ["Seasonality", "Timeline"], horizontal=True, index=0)
+    df = get_data()
+    filters = collect_filters(df)
+    chart_mode = filters["chart_mode"]
+    chart_type = filters["chart_type"]
 
     if chart_mode == "Offline Capacity":
         render_header("Offline Capacity Monitor", "Daily capacity offline by season and year")
     else:
         render_header("Total Capacity Monitor", "Total installed capacity by unit type and year")
 
-    df = get_data()
-
-    filters = collect_filters(df)
     filtered = apply_filters(df.copy(), filters)
 
     if chart_mode == "Offline Capacity":
