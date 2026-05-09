@@ -378,6 +378,8 @@ def main() -> None:
     """Assemble and run the full Streamlit dashboard."""
     st.set_page_config(page_title="Offline Capacity Monitor", layout="wide")
 
+    if not check_password():
+        st.stop()
 
     inject_ga()
     render_header()
