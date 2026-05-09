@@ -104,7 +104,16 @@ def load_offline_events(filepath: str = "Offline Event.csv") -> pd.DataFrame:
         df[col] = pd.to_datetime(df[col], format="%d-%b-%Y", errors="coerce")
     df = apply_unit_type_mapping(df)
     df = rename_padd_regions(df)
-    df.loc[df["CAP_UOM"] == "BBL/d", "CAP_OFFLINE"] /= 1000
-    df.loc[df["CAP_UOM"] == "BBL/d", "U_CAPACITY"] /= 1000
-    df["CAP_UOM"] = df["CAP_UOM"].replace("BBL/d", "kbd")
+    bbl_mask = (df["CAP_UOM"] == "BBL/d") | df["CAP_UOM"].isna()
+    td_mask  = df["CAP_UOM"] == "T/d"
+
+    df.loc[bbl_mask, "CAP_OFFLINE"] /= 1000
+    df.loc[bbl_mask, "U_CAPACITY"]  /= 1000
+    df.loc[bbl_mask, "CAP_UOM"]     = "kbd"
+
+    df.loc[td_mask, "CAP_OFFLINE"] = df.loc[td_mask, "CAP_OFFLINE"] * 7 / 1000
+    df.loc[td_mask, "U_CAPACITY"]  = df.loc[td_mask, "U_CAPACITY"]  * 7 / 1000
+    df.loc[td_mask, "CAP_UOM"]     = "kbd"
+
+    df = df[df["CAP_UOM"] == "kbd"]
     return df
