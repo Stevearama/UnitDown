@@ -5,6 +5,8 @@ import pandas as pd
 
 from data_import import load_offline_events
 from chart_data import build_seasonality_data
+from data_import_capacity import load_units
+from chart_data_capacity import build_capacity_data
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -81,6 +83,22 @@ def check_password() -> bool:
 # ---------------------------------------------------------------------------
 # Data
 # ---------------------------------------------------------------------------
+
+@st.cache_data(ttl=21600)
+def get_capacity_data() -> pd.DataFrame:
+    """Load and cache the units dataset (total capacity).
+
+    On Streamlit Cloud, downloads from Google Drive using gdrive_units_file_id secret.
+    Locally, falls back to reading 'units.csv'.
+    """
+    file_id = st.secrets.get("gdrive_units_file_id", None)
+    if file_id:
+        import gdown, os, tempfile
+        tmp_path = os.path.join(tempfile.gettempdir(), "units.csv")
+        gdown.download(f"https://drive.google.com/uc?id={file_id}", tmp_path, quiet=True)
+        return load_units(tmp_path)
+    return load_units()
+
 
 @st.cache_data(ttl=21600)
 def get_data() -> pd.DataFrame:
@@ -160,8 +178,12 @@ def apply_filters(df: pd.DataFrame, filters: dict) -> pd.DataFrame:
             continue
         if col == "YEAR":
             mask = pd.Series(False, index=df.index)
+            start_year = df["START_DATE"].dt.year
+            end_year = df["END_DATE"].dt.year
             for y in selected:
-                mask |= (df["START_DATE"].dt.year <= y) & (df["END_DATE"].dt.year >= y)
+                started = (start_year <= y) | df["START_DATE"].isna()
+                still_running = (end_year >= y) | df["END_DATE"].isna()
+                mask |= started & still_running
             df = df[mask]
         else:
             df = df[df[col].isin(selected)]
@@ -180,15 +202,14 @@ def _describe_filter(selected: list, plural: str) -> str:
     return f"{selected[0]} & {len(selected) - 1} more"
 
 
-def build_chart_title(filters: dict) -> str:
+def build_chart_title(filters: dict, prefix: str = "Offline Capacity for") -> str:
     """Construct a human-readable chart title that reflects the active filter selections."""
     unit    = _describe_filter(filters["UTYPE_DESC"], "unit types")
     country = _describe_filter(filters["COUNTRY"],    "countries")
     owner   = _describe_filter(filters["OWNER_NAME"], "owners")
     region  = _describe_filter(filters["PADD_REG"],   "regions")
-    # Strip trailing periods from values (e.g. "U.S.A.") before joining with " · "
     parts = [p.rstrip(".") for p in [unit, country, owner, region]]
-    return "Offline Capacity for " + "  ·  ".join(parts)
+    return prefix + "  ·  ".join(parts)
 
 # ---------------------------------------------------------------------------
 # Chart
@@ -220,7 +241,7 @@ def _dominant_uom(df: pd.DataFrame) -> str:
     return mode.iloc[0] if not mode.empty else ""
 
 
-def build_chart(seasonality_df: pd.DataFrame, uom: str) -> go.Figure:
+def build_chart(seasonality_df: pd.DataFrame, uom: str, y_label: str = "Capacity Offline") -> go.Figure:
     """Build an Economist-style seasonality line chart with one line per year."""
     fig = go.Figure()
 
@@ -253,7 +274,7 @@ def build_chart(seasonality_df: pd.DataFrame, uom: str) -> go.Figure:
         ),
         yaxis=dict(
             title=dict(
-                text=f"Capacity Offline ({uom})" if uom else "Capacity Offline",
+                text=f"{y_label} ({uom})" if uom else y_label,
                 font=dict(color="#000000"),
             ),
             tickfont=dict(color="#000000"),
@@ -392,20 +413,39 @@ def main() -> None:
     render_metrics(filtered)
     st.markdown("---")
 
-    # Seasonality chart
-    if filtered.empty:
-        st.warning("No events match the selected filters.")
+    # Chart toggle
+    chart_mode = st.radio("View", ["Offline Capacity", "Total Capacity"], horizontal=True, index=0)
+
+    if chart_mode == "Offline Capacity":
+        if filtered.empty:
+            st.warning("No events match the selected filters.")
+        else:
+            title = build_chart_title(filters, prefix="Offline Capacity for ")
+            st.markdown(
+                f"<h3 style='font-family:\"Arial Black\",Arial,sans-serif; "
+                f"color:#000000; font-size:1.1rem; margin-bottom:4px;'>{title}</h3>",
+                unsafe_allow_html=True,
+            )
+            uom = _dominant_uom(filtered)
+            seasonality = build_seasonality_data(filtered, years=filters["YEAR"] or None)
+            fig = build_chart(seasonality, uom, y_label="Capacity Offline")
+            st.plotly_chart(fig)
     else:
-        title = build_chart_title(filters)
-        st.markdown(
-            f"<h3 style='font-family:\"Arial Black\",Arial,sans-serif; "
-            f"color:#000000; font-size:1.1rem; margin-bottom:4px;'>{title}</h3>",
-            unsafe_allow_html=True,
-        )
-        uom = _dominant_uom(filtered)
-        seasonality = build_seasonality_data(filtered, years=filters["YEAR"] or None)
-        fig = build_chart(seasonality, uom)
-        st.plotly_chart(fig)
+        units_df = get_capacity_data()
+        filtered_units = apply_filters(units_df.copy(), filters)
+        if filtered_units.empty:
+            st.warning("No units match the selected filters.")
+        else:
+            title = build_chart_title(filters, prefix="Total Capacity for ")
+            st.markdown(
+                f"<h3 style='font-family:\"Arial Black\",Arial,sans-serif; "
+                f"color:#000000; font-size:1.1rem; margin-bottom:4px;'>{title}</h3>",
+                unsafe_allow_html=True,
+            )
+            uom = _dominant_uom(filtered_units)
+            seasonality = build_capacity_data(filtered_units, years=filters["YEAR"] or None)
+            fig = build_chart(seasonality, uom, y_label="Total Capacity")
+            st.plotly_chart(fig)
 
     st.markdown("---")
 
