@@ -521,7 +521,13 @@ def main() -> None:
             uom = _dominant_uom(filtered)
             seasonality = build_seasonality_data(filtered, years=filters["YEAR"] or None)
             fig = build_chart(seasonality, uom, y_label="Capacity Offline")
-            st.plotly_chart(fig)
+            chart_years = sorted(seasonality["year"].unique().tolist())
+            event = st.plotly_chart(fig, on_select="rerun", key="offline_chart")
+            if event and event.selection and event.selection.points:
+                pt = event.selection.points[0]
+                year = chart_years[pt["curve_number"]]
+                plot_x = pd.Timestamp(pt["x"])
+                st.session_state["selected_date"] = plot_x.replace(year=int(year))
     else:
         units_df = get_capacity_data()
         filtered_units = apply_filters(units_df.copy(), filters)
@@ -544,11 +550,12 @@ def main() -> None:
     if chart_mode == "Total Capacity":
         render_capacity_tables(filtered_units, filters)
     else:
-        tab_active, tab_starts, tab_ends, tab_all = st.tabs([
+        tab_active, tab_starts, tab_ends, tab_all, tab_selected = st.tabs([
             "Active Now",
             "Started — Last 10 Days",
             "Ended — Last 10 Days",
             "All Events",
+            "Events on Selected Date",
         ])
 
         with tab_active:
@@ -562,6 +569,17 @@ def main() -> None:
 
         with tab_all:
             render_table(filtered, "No events match the selected filters.")
+
+        with tab_selected:
+            sel_date = st.session_state.get("selected_date")
+            if sel_date is None:
+                st.info("Click a point on the chart to see active events for that date.")
+            else:
+                st.caption(f"Active events on {sel_date.strftime('%b %d %Y')}")
+                events_on_date = filtered[
+                    (filtered["START_DATE"] <= sel_date) & (filtered["END_DATE"] >= sel_date)
+                ]
+                render_table(events_on_date, "No active events for this date.")
 
 
 
