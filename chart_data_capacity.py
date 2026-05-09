@@ -22,12 +22,9 @@ def build_capacity_data(df: pd.DataFrame, years: list = None) -> pd.DataFrame:
         return pd.DataFrame(columns=["date", "CAP_OFFLINE", "year", "plot_date"])
 
     max_date = pd.Timestamp(f"{max(selected_years)}-12-31")
-    full_range = pd.DatetimeIndex(
-        pd.concat([
-            pd.Series(pd.date_range(f"{y}-01-01", f"{y}-12-31", freq="D"))
-            for y in selected_years
-        ])
-    )
+    # Always compute from MIN_CHART_DATE so units operating before the first selected
+    # year are correctly accumulated before their closure subtractions are applied.
+    full_range = pd.date_range(MIN_CHART_DATE, max_date, freq="D")
 
     valid = df.dropna(subset=["U_CAPACITY"]).copy()
     valid = valid[valid["U_CAPACITY"] > 0]

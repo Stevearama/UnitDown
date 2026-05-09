@@ -7,8 +7,9 @@ KEEP_COLS = [
     "LATITUDE", "LONGITUDE",
 ]
 
-# Never operated — exclude from capacity timeline
-EXCLUDE_STATUSES = {"Cancelled", "Planned", "Engineered"}
+EXCLUDE_ALWAYS    = {"Cancelled"}
+REQUIRE_STARTUP   = {"On Hold", "Under Construction", "Planned", "Engineered"}
+REQUIRE_EITHER_DATE = {"Closed", "Mothballed", "Removed", "Shuttered"}
 
 # Intentionally duplicated from data_import.py — pipelines are kept independent
 RENAME_UNIT_TYPE = {
@@ -90,6 +91,16 @@ COLUMN_RENAME = {
 }
 
 
+def _apply_status_filter(df: pd.DataFrame) -> pd.DataFrame:
+    df = df[~df["U_STATUS"].isin(EXCLUDE_ALWAYS)]
+    needs_startup = df["U_STATUS"].isin(REQUIRE_STARTUP)
+    df = df[~needs_startup | df["STARTUP"].notna()]
+    has_period = df["U_STATUS"].isin(REQUIRE_EITHER_DATE)
+    both_null = df["STARTUP"].isna() & df["SHUTDOWN"].isna()
+    df = df[~(has_period & both_null)]
+    return df
+
+
 def _parse_dates(series: pd.Series) -> pd.Series:
     """Parse 2-digit year dates (e.g. '1-Jan-51'), correcting future dates back 100 years."""
     parsed = pd.to_datetime(series, format="%d-%b-%y", errors="coerce")
@@ -103,11 +114,11 @@ def _parse_dates(series: pd.Series) -> pd.Series:
 
 def load_units(filepath: str = "units.csv") -> pd.DataFrame:
     df = pd.read_csv(filepath, usecols=KEEP_COLS, low_memory=False)
-    df = df[~df["U_STATUS"].isin(EXCLUDE_STATUSES)]
     df = df.dropna(subset=["U_CAPACITY"])
     df = df[df["U_CAPACITY"] > 0]
     df["STARTUP"] = _parse_dates(df["STARTUP"])
     df["SHUTDOWN"] = _parse_dates(df["SHUTDOWN"])
+    df = _apply_status_filter(df)
     df = df[df["SHUTDOWN"].isna() | (df["SHUTDOWN"] >= "2020-01-01")]
     df = df.rename(columns=COLUMN_RENAME)
     df["UTYPE_DESC"] = df["UTYPE_DESC"].replace(RENAME_UNIT_TYPE)
