@@ -521,16 +521,7 @@ def main() -> None:
             uom = _dominant_uom(filtered)
             seasonality = build_seasonality_data(filtered, years=filters["YEAR"] or None)
             fig = build_chart(seasonality, uom, y_label="Capacity Offline")
-            chart_years = sorted(seasonality["year"].unique().tolist())
-            event = st.plotly_chart(fig, on_select="rerun", key="offline_chart")
-            if event and event.selection:
-                if event.selection.points:
-                    pt = event.selection.points[0]
-                    year = chart_years[pt["curve_number"]]
-                    plot_x = pd.Timestamp(pt["x"])
-                    st.session_state["selected_date"] = plot_x.replace(year=int(year))
-                else:
-                    st.session_state.pop("selected_date", None)
+            st.plotly_chart(fig)
     else:
         units_df = get_capacity_data()
         filtered_units = apply_filters(units_df.copy(), filters)
@@ -570,13 +561,13 @@ def main() -> None:
             render_table(get_recent_ends(filtered), "No events ended in the last 10 days.")
 
         with tab_all:
-            sel_date = st.session_state.get("selected_date")
+            sel_date = st.date_input("Filter to date (optional)", value=None, key="all_events_date")
             if sel_date is None:
                 render_table(filtered, "No events match the selected filters.")
             else:
-                st.caption(f"Active events on {sel_date.strftime('%b %d %Y')} — click white space on chart to reset")
+                sel_ts = pd.Timestamp(sel_date)
                 events_on_date = filtered[
-                    (filtered["START_DATE"] <= sel_date) & (filtered["END_DATE"] >= sel_date)
+                    (filtered["START_DATE"] <= sel_ts) & (filtered["END_DATE"] >= sel_ts)
                 ]
                 render_table(events_on_date, "No active events for this date.")
 
