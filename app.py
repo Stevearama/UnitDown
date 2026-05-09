@@ -145,6 +145,8 @@ def collect_filters(df: pd.DataFrame) -> dict:
     cur = pd.Timestamp.today().year
     default_years = [cur - 3, cur - 2, cur - 1, cur, cur + 1]
 
+    if "year" in st.session_state:
+        st.session_state["year"] = sorted(st.session_state["year"])
     year = render_multiselect("Year", available_years, "year", default=default_years)
     df1 = df[df["START_DATE"].dt.year.isin(year)] if year else df
 
