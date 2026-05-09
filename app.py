@@ -323,6 +323,98 @@ def get_recent_ends(df: pd.DataFrame, days: int = 10) -> pd.DataFrame:
     return df[(df["END_DATE"] >= cutoff) & (df["END_DATE"] <= today)]
 
 # ---------------------------------------------------------------------------
+# Capacity table helpers
+# ---------------------------------------------------------------------------
+
+CAPACITY_PLANT_COLS = ["OWNER_NAME", "PLANT_NAME", "COUNTRY", "MARKET_REG", "WORLD_REG", "PADD_REG"]
+
+CAPACITY_PLANT_LABELS = {
+    "OWNER_NAME": "Owner",
+    "PLANT_NAME": "Plant",
+    "COUNTRY":    "Country",
+    "MARKET_REG": "Market Region",
+    "WORLD_REG":  "World Region",
+    "PADD_REG":   "Region",
+}
+
+
+def build_plant_pivot(df: pd.DataFrame) -> pd.DataFrame:
+    """Pivot units into a plant × unit-type capacity table, one row per plant."""
+    if df.empty:
+        return pd.DataFrame()
+    pivot = pd.pivot_table(
+        df,
+        values="U_CAPACITY",
+        index=CAPACITY_PLANT_COLS,
+        columns="UTYPE_DESC",
+        aggfunc="sum",
+        fill_value=0,
+    ).reset_index()
+    pivot.columns.name = None
+    return pivot.rename(columns=CAPACITY_PLANT_LABELS)
+
+
+def render_capacity_tables(filtered_units: pd.DataFrame, filters: dict) -> None:
+    """Render the three capacity tabs: active plants, closures, openings."""
+    today = pd.Timestamp.today().normalize()
+    selected_years = filters.get("YEAR", [])
+    if selected_years:
+        year_start = pd.Timestamp(f"{min(selected_years)}-01-01")
+        year_end   = pd.Timestamp(f"{max(selected_years)}-12-31")
+    else:
+        year_start = year_end = None
+
+    active = filtered_units[
+        filtered_units["END_DATE"].isna() | (filtered_units["END_DATE"] >= today)
+    ]
+
+    if year_start is not None:
+        closed = filtered_units[
+            filtered_units["END_DATE"].notna() &
+            (filtered_units["END_DATE"] >= year_start) &
+            (filtered_units["END_DATE"] <= year_end)
+        ]
+        opened = filtered_units[
+            filtered_units["START_DATE"].notna() &
+            (filtered_units["START_DATE"] >= year_start) &
+            (filtered_units["START_DATE"] <= year_end)
+        ]
+    else:
+        closed = filtered_units[filtered_units["END_DATE"].notna()]
+        opened = filtered_units[filtered_units["START_DATE"].notna()]
+
+    tab1, tab2, tab3 = st.tabs([
+        "Active Plants",
+        "Closed — Selected Years",
+        "Opened — Selected Years",
+    ])
+
+    with tab1:
+        pivot = build_plant_pivot(active)
+        st.caption(f"{active['PLANT_NAME'].nunique():,} plants")
+        if pivot.empty:
+            st.info("No active plants for this selection.")
+        else:
+            st.dataframe(pivot, hide_index=True, height=400)
+
+    with tab2:
+        pivot = build_plant_pivot(closed)
+        st.caption(f"{closed['PLANT_NAME'].nunique():,} plants with closures")
+        if pivot.empty:
+            st.info("No closures in the selected years.")
+        else:
+            st.dataframe(pivot, hide_index=True, height=400)
+
+    with tab3:
+        pivot = build_plant_pivot(opened)
+        st.caption(f"{opened['PLANT_NAME'].nunique():,} plants with openings")
+        if pivot.empty:
+            st.info("No openings in the selected years.")
+        else:
+            st.dataframe(pivot, hide_index=True, height=400)
+
+
+# ---------------------------------------------------------------------------
 # Table helpers
 # ---------------------------------------------------------------------------
 
@@ -449,25 +541,27 @@ def main() -> None:
 
     st.markdown("---")
 
-    # Tables in tabs
-    tab_active, tab_starts, tab_ends, tab_all = st.tabs([
-        "Active Now",
-        "Started — Last 10 Days",
-        "Ended — Last 10 Days",
-        "All Events",
-    ])
+    if chart_mode == "Total Capacity":
+        render_capacity_tables(filtered_units, filters)
+    else:
+        tab_active, tab_starts, tab_ends, tab_all = st.tabs([
+            "Active Now",
+            "Started — Last 10 Days",
+            "Ended — Last 10 Days",
+            "All Events",
+        ])
 
-    with tab_active:
-        render_table(get_active_events(filtered), "No currently active events for this selection.")
+        with tab_active:
+            render_table(get_active_events(filtered), "No currently active events for this selection.")
 
-    with tab_starts:
-        render_table(get_recent_starts(filtered), "No events started in the last 10 days.")
+        with tab_starts:
+            render_table(get_recent_starts(filtered), "No events started in the last 10 days.")
 
-    with tab_ends:
-        render_table(get_recent_ends(filtered), "No events ended in the last 10 days.")
+        with tab_ends:
+            render_table(get_recent_ends(filtered), "No events ended in the last 10 days.")
 
-    with tab_all:
-        render_table(filtered, "No events match the selected filters.")
+        with tab_all:
+            render_table(filtered, "No events match the selected filters.")
 
 
 
