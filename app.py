@@ -461,9 +461,9 @@ def build_map_data(units_df: pd.DataFrame, events_df: pd.DataFrame, filters: dic
 
     # Hover text: one line per unit type
     merged["_line"] = (
-        "&nbsp;&nbsp;" + merged["UTYPE_DESC"]
-        + ": " + merged["U_CAPACITY"].map("{:,.0f}".format) + " kbd capacity"
-        + ", " + merged["CAP_OFFLINE"].map("{:,.0f}".format) + " kbd offline"
+        merged["UTYPE_DESC"]
+        + "  Capacity: " + merged["U_CAPACITY"].map("{:,.0f}".format) + " kbd"
+        + "  Offline: " + merged["CAP_OFFLINE"].map("{:,.0f}".format) + " kbd"
     )
     type_lines = (
         merged.sort_values(["PLANT_ID", "UTYPE_DESC"])
@@ -474,10 +474,10 @@ def build_map_data(units_df: pd.DataFrame, events_df: pd.DataFrame, filters: dic
 
     plant_totals = plant_totals.merge(type_lines, on="PLANT_ID", how="left")
     plant_totals["hover_text"] = (
-        "<b>" + plant_totals["PLANT_NAME"] + "</b> (" + plant_totals["OWNER_NAME"] + ")<br>"
+        "Plant Name: " + plant_totals["PLANT_NAME"] + "<br>"
+        + "Owner: " + plant_totals["OWNER_NAME"] + "<br>"
+        + "<br>"
         + plant_totals["type_detail"]
-        + "<br><b>Total: " + plant_totals["total_capacity"].map("{:,.0f}".format)
-        + " kbd | " + plant_totals["total_offline"].map("{:,.0f}".format) + " kbd offline</b>"
     )
 
     return plant_totals
