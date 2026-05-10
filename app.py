@@ -725,7 +725,7 @@ def build_map_chart(map_data: pd.DataFrame, center: dict, zoom: float) -> go.Fig
     # Plants with no CDU (standalone cokers, hydrocrackers etc.) get the minimum size.
     dot_sizes = map_data["cdu_capacity"].pow(0.5).clip(lower=5, upper=35)
 
-    for key in ("red", "orange", "green"):
+    for key in ("green", "orange", "red"):
         idx = map_data["color"] == key
         subset = map_data[idx]
         if subset.empty:
