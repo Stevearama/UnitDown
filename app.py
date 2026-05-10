@@ -563,6 +563,7 @@ def build_map_chart(map_data: pd.DataFrame, center: dict, zoom: float) -> go.Fig
             style="carto-positron",
             center=center,
             zoom=zoom,
+            bounds=dict(west=-180, east=180, south=-90, north=90),
         ),
         height=600,
         margin=dict(l=0, r=0, t=0, b=0),
