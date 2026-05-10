@@ -841,13 +841,21 @@ def main() -> None:
             for col, h in zip(st.columns(_COL_W), _HDRS):
                 col.markdown(f"<p style='{_LABEL}'>{h}</p>", unsafe_allow_html=True)
 
+            _PCT = "font-size:0.65rem; color:#999999; margin-left:4px;"
+
             # One data row per unit type
             for _, row in type_summary.iterrows():
+                total = row["total_capacity"]
+                def _pct(v):
+                    if total <= 0:
+                        return ""
+                    return f"<span style='{_PCT}'>{v / total:.0%}</span>"
+
                 vals = [
                     row["UTYPE_DESC"],
-                    f"{row['total_capacity']:,.0f}",
-                    f"{row['available']:,.0f}",
-                    f"{row['total_offline']:,.0f}",
+                    f"{total:,.0f}",
+                    f"{row['available']:,.0f}{_pct(row['available'])}",
+                    f"{row['total_offline']:,.0f}{_pct(row['total_offline'])}",
                     f"{int(row['no_outage']):,}",
                     f"{int(row['partial']):,}",
                     f"{int(row['all_offline']):,}",
