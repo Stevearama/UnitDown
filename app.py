@@ -1033,6 +1033,21 @@ def main() -> None:
         if filtered_units.empty:
             st.warning("No units match the selected filters.")
         else:
+            # Bound the chart to the selected year window.
+            # When no years are explicitly chosen the multiselect defaults to
+            # [cur-3 … cur+1]; mirror that same window here so the chart never
+            # extends into far-future planned capacity.
+            cur = pd.Timestamp.today().year
+            effective_years = filters["YEAR"] if filters["YEAR"] else list(range(cur - 3, cur + 2))
+            max_filter_date = pd.Timestamp(f"{max(effective_years)}-12-31")
+
+            # Drop units whose start falls entirely outside the window — they
+            # contribute nothing to the chart and reducing the dataset here
+            # speeds up all downstream chart-data functions.
+            filtered_units = filtered_units[
+                filtered_units["START_DATE"].isna() | (filtered_units["START_DATE"] <= max_filter_date)
+            ]
+
             title = build_chart_title(filters, prefix="Total Capacity for ")
             st.markdown(
                 f"<h3 style='font-family:\"Arial Black\",Arial,sans-serif; "
@@ -1041,13 +1056,13 @@ def main() -> None:
             )
             uom = _dominant_uom(filtered_units)
             if chart_type == "Seasonality":
-                data = build_capacity_data(filtered_units, years=filters["YEAR"] or None)
+                data = build_capacity_data(filtered_units, years=effective_years)
                 fig = build_chart(data, uom, y_label="Total Capacity")
             elif chart_type == "Stacked Timeline":
-                data = build_capacity_timeline_data(filtered_units, years=filters["YEAR"] or None)
+                data = build_capacity_timeline_data(filtered_units, years=effective_years)
                 fig = build_stacked_timeline_chart(data, uom, y_label="Total Capacity")
             else:
-                data = build_capacity_timeline_data(filtered_units, years=filters["YEAR"] or None)
+                data = build_capacity_timeline_data(filtered_units, years=effective_years)
                 fig = build_timeline_chart(data, uom, y_label="Total Capacity")
             st.plotly_chart(fig)
 
