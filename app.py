@@ -739,9 +739,19 @@ def render_capacity_tables(filtered_units: pd.DataFrame, filters: dict) -> None:
 # Table helpers
 # ---------------------------------------------------------------------------
 
+_DISPLAY_COL_ORDER = [
+    "WORLD_REG", "COUNTRY", "PADD_REG", "PLANT_NAME", "OWNER_NAME",
+    "UTYPE_DESC", "U_CAPACITY", "CAP_OFFLINE", "DERATE",
+    "START_DATE", "END_DATE", "EVENT_TYPE", "E_CAUSE",
+]
+
+
 def prepare_display_table(df: pd.DataFrame) -> pd.DataFrame:
-    """Drop hidden columns, format dates, and rename to human-readable labels for display."""
+    """Drop hidden columns, enforce column order, format dates, and rename for display."""
     display = df.drop(columns=[c for c in DISPLAY_HIDDEN if c in df.columns]).copy()
+    ordered = [c for c in _DISPLAY_COL_ORDER if c in display.columns]
+    remainder = [c for c in display.columns if c not in ordered]
+    display = display[ordered + remainder]
     for col in ("START_DATE", "END_DATE"):
         if col in display.columns:
             display[col] = display[col].dt.strftime("%b %d %Y")
