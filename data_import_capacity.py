@@ -33,13 +33,18 @@ def _apply_status_filter(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def _parse_dates(series: pd.Series) -> pd.Series:
-    """Parse 2-digit year dates (e.g. '1-Jan-51'), correcting future dates back 100 years."""
+    """Parse 2-digit year dates, correcting implausible far-future dates back 100 years.
+
+    Years within 20 years of today are kept as-is (legitimate planned-unit horizons).
+    Years beyond that are assumed to be century-rollover artefacts (e.g. '47' parsed
+    as 2047 when the source meant 1947).
+    """
     parsed = pd.to_datetime(series, format="%d-%b-%y", errors="coerce")
-    today_year = pd.Timestamp.today().year
+    cutoff_year = pd.Timestamp.today().year + 20
     def _fix(dt):
         if pd.isna(dt):
             return dt
-        return dt.replace(year=dt.year - 100) if dt.year > today_year else dt
+        return dt.replace(year=dt.year - 100) if dt.year > cutoff_year else dt
     return parsed.apply(_fix)
 
 

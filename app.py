@@ -485,7 +485,8 @@ def build_map_data(units_df: pd.DataFrame, events_df: pd.DataFrame, filters: dic
     # Active units matching filters (year and event_type irrelevant for units)
     active_units = _apply_col_filters(units_df.copy(), filters, skip=_MAP_UNIT_SKIP)
     active_units = active_units[
-        active_units["END_DATE"].isna() | (active_units["END_DATE"] >= today)
+        (active_units["START_DATE"].isna() | (active_units["START_DATE"] <= today)) &
+        (active_units["END_DATE"].isna()   | (active_units["END_DATE"]   >= today))
     ].dropna(subset=["LATITUDE", "LONGITUDE"])
 
     # Events active today matching filters (year ignored — map always shows today)
@@ -721,7 +722,8 @@ def render_capacity_tables(filtered_units: pd.DataFrame, filters: dict) -> None:
         year_start = year_end = None
 
     active = filtered_units[
-        filtered_units["END_DATE"].isna() | (filtered_units["END_DATE"] >= today)
+        (filtered_units["START_DATE"].isna() | (filtered_units["START_DATE"] <= today)) &
+        (filtered_units["END_DATE"].isna()   | (filtered_units["END_DATE"]   >= today))
     ]
 
     if year_start is not None:
