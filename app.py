@@ -728,6 +728,7 @@ def render_header(title: str, subtitle: str) -> None:
         f"""
         <style>
         [data-testid="stToolbarActions"] {{display: none;}}
+        .block-container {{padding-top: 1.5rem;}}
         </style>
         <h1 style='font-family:"Arial Black",Arial,sans-serif;
                    color:#000000; margin-bottom:2px; font-size:2rem;'>
