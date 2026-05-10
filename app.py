@@ -55,7 +55,7 @@ COLUMN_LABELS = {
 }
 
 # Columns kept in the DataFrame but hidden from every display table
-DISPLAY_HIDDEN = {"UNIT_ID", "PLANT_ID", "U_STATUS", "LATITUDE", "LONGITUDE", "CAP_UOM", "E_STATUS_RESEARCH", "MARKET_REG", "WORLD_REG"}
+DISPLAY_HIDDEN = {"UNIT_ID", "PLANT_ID", "U_STATUS", "LATITUDE", "LONGITUDE", "CAP_UOM", "E_STATUS_RESEARCH", "MARKET_REG"}
 
 # ---------------------------------------------------------------------------
 # Shared AG Grid styling
