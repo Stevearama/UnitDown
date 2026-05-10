@@ -6,7 +6,7 @@ import streamlit.components.v1 as components
 import plotly.graph_objects as go
 import pandas as pd
 
-from st_aggrid import AgGrid, GridOptionsBuilder
+from st_aggrid import AgGrid, GridOptionsBuilder, JsCode
 
 from data_import import load_offline_events
 from chart_data import build_seasonality_data
@@ -72,6 +72,11 @@ _AGGRID_CSS = {
 }
 
 
+_NUM_FORMATTER = JsCode(
+    "function(p){return p.value!=null?Math.round(p.value).toLocaleString():''}"
+)
+
+
 def render_aggrid(df: pd.DataFrame, height: int = 400, right_align_cols: list = None) -> None:
     """Render a DataFrame as a consistently styled AG Grid table."""
     gb = GridOptionsBuilder.from_dataframe(df)
@@ -83,6 +88,8 @@ def render_aggrid(df: pd.DataFrame, height: int = 400, right_align_cols: list = 
         autoHeaderHeight=True,
     )
     gb.configure_grid_options(rowHeight=32)
+    for col in df.select_dtypes(include="number").columns:
+        gb.configure_column(col, valueFormatter=_NUM_FORMATTER, type=["numericColumn"])
     for col in (right_align_cols or []):
         gb.configure_column(
             col,
@@ -96,6 +103,7 @@ def render_aggrid(df: pd.DataFrame, height: int = 400, right_align_cols: list = 
         fit_columns_on_grid_load=True,
         theme="alpine",
         custom_css=_AGGRID_CSS,
+        allow_unsafe_jscode=True,
     )
 
 # ---------------------------------------------------------------------------
