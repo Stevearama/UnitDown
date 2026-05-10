@@ -1,3 +1,6 @@
+import math
+import time
+
 import streamlit as st
 import streamlit.components.v1 as components
 import plotly.graph_objects as go
@@ -483,7 +486,29 @@ def build_map_data(units_df: pd.DataFrame, events_df: pd.DataFrame, filters: dic
     return plant_totals
 
 
-def build_map_chart(map_data: pd.DataFrame) -> go.Figure:
+def _fit_bounds(lats: pd.Series, lons: pd.Series) -> tuple:
+    """Return (center_dict, zoom_float) that fits all lat/lon points with a little padding."""
+    if lats.empty:
+        return {"lat": 20.0, "lon": 0.0}, 2.0
+
+    min_lat, max_lat = float(lats.min()), float(lats.max())
+    min_lon, max_lon = float(lons.min()), float(lons.max())
+    center = {"lat": (min_lat + max_lat) / 2.0, "lon": (min_lon + max_lon) / 2.0}
+
+    lat_range = max_lat - min_lat
+    lon_range = max_lon - min_lon
+
+    if lat_range == 0 and lon_range == 0:
+        return center, 8.0
+
+    lat_zoom = math.log2(180.0 / lat_range) if lat_range > 0 else 12.0
+    lon_zoom = math.log2(360.0 / lon_range) if lon_range > 0 else 12.0
+    zoom = max(1.0, min(min(lat_zoom, lon_zoom) - 0.75, 12.0))
+
+    return center, round(zoom, 2)
+
+
+def build_map_chart(map_data: pd.DataFrame, center: dict, zoom: float) -> go.Figure:
     """Build a Plotly Scattermapbox with green/orange/red plant dots."""
     _DOT_COLORS = {"green": "#2E7D32", "orange": "#E65C00", "red": "#CC0000"}
     _DOT_LABELS = {"green": "No outage", "orange": "Partial outage", "red": "All offline"}
@@ -507,8 +532,8 @@ def build_map_chart(map_data: pd.DataFrame) -> go.Figure:
     fig.update_layout(
         mapbox=dict(
             style="carto-positron",
-            center=dict(lat=map_data["LATITUDE"].mean(), lon=map_data["LONGITUDE"].mean()),
-            zoom=2,
+            center=center,
+            zoom=zoom,
         ),
         height=600,
         margin=dict(l=0, r=0, t=0, b=0),
@@ -746,6 +771,37 @@ def main() -> None:
         if map_data.empty:
             st.warning("No plants with location data match the selected filters.")
         else:
+            # --- Debounced auto-zoom ---
+            # Hash the visible plant IDs so any filter change is detected.
+            current_hash = tuple(sorted(map_data["PLANT_ID"].tolist()))
+            now = time.time()
+            prev_hash    = st.session_state.get("map_filters_hash")
+            last_change  = st.session_state.get("map_filters_changed_at", 0.0)
+
+            if prev_hash is None:
+                # First load — compute bounds immediately.
+                center, zoom = _fit_bounds(map_data["LATITUDE"], map_data["LONGITUDE"])
+                st.session_state["map_filters_hash"]       = current_hash
+                st.session_state["map_filters_changed_at"] = now
+                st.session_state["map_center"]             = center
+                st.session_state["map_zoom"]               = zoom
+            elif prev_hash != current_hash:
+                # Filters just changed — start the debounce timer, keep old view.
+                st.session_state["map_filters_hash"]       = current_hash
+                st.session_state["map_filters_changed_at"] = now
+            elif now - last_change >= 2.0:
+                # Stable for 2 s — zoom to fit the current data.
+                center, zoom = _fit_bounds(map_data["LATITUDE"], map_data["LONGITUDE"])
+                st.session_state["map_center"] = center
+                st.session_state["map_zoom"]   = zoom
+            else:
+                # Still within the debounce window — sleep the remainder then rerun.
+                time.sleep(2.0 - (now - last_change))
+                st.rerun()
+
+            center = st.session_state.get("map_center", {"lat": float(map_data["LATITUDE"].mean()), "lon": float(map_data["LONGITUDE"].mean())})
+            zoom   = st.session_state.get("map_zoom", 2.0)
+
             n_green  = int((map_data["color"] == "green").sum())
             n_orange = int((map_data["color"] == "orange").sum())
             n_red    = int((map_data["color"] == "red").sum())
@@ -753,7 +809,7 @@ def main() -> None:
             c1.metric("No outage",      f"{n_green:,}")
             c2.metric("Partial outage", f"{n_orange:,}")
             c3.metric("All offline",    f"{n_red:,}")
-            st.plotly_chart(build_map_chart(map_data), use_container_width=True, config={"scrollZoom": True})
+            st.plotly_chart(build_map_chart(map_data, center, zoom), use_container_width=True, config={"scrollZoom": True})
 
     elif chart_mode == "Offline Capacity":
         if filtered.empty:
