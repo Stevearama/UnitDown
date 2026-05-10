@@ -621,6 +621,15 @@ def build_map_data(units_df: pd.DataFrame, events_df: pd.DataFrame, filters: dic
         .agg(total_capacity=("U_CAPACITY", "sum"), total_offline=("CAP_OFFLINE", "sum"))
     )
 
+    # CDU capacity per plant — used to size map dots (best proxy for refinery scale)
+    cdu_cap = (
+        merged[merged["UTYPE_DESC"] == "CDU"]
+        .groupby("PLANT_ID", as_index=False)["U_CAPACITY"].sum()
+        .rename(columns={"U_CAPACITY": "cdu_capacity"})
+    )
+    plant_totals = plant_totals.merge(cdu_cap, on="PLANT_ID", how="left")
+    plant_totals["cdu_capacity"] = plant_totals["cdu_capacity"].fillna(0)
+
     def _color(row):
         if row["total_offline"] == 0:
             return "green"
@@ -712,8 +721,9 @@ def build_map_chart(map_data: pd.DataFrame, center: dict, zoom: float) -> go.Fig
 
     fig = go.Figure()
 
-    # Scale dot size by sqrt of total capacity, clamped to a sensible pixel range
-    dot_sizes = map_data["total_capacity"].pow(0.5).clip(lower=5, upper=35)
+    # Scale dot size by sqrt of CDU capacity — best single proxy for refinery scale.
+    # Plants with no CDU (standalone cokers, hydrocrackers etc.) get the minimum size.
+    dot_sizes = map_data["cdu_capacity"].pow(0.5).clip(lower=5, upper=35)
 
     for key in ("red", "orange", "green"):
         idx = map_data["color"] == key
