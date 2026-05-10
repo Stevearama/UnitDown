@@ -189,22 +189,24 @@ def collect_filters(df: pd.DataFrame) -> dict:
     event_choice = st.sidebar.radio("Event type", ["Planned", "Unplanned", "Both"], horizontal=True, index=2)
     chart_type_val = st.sidebar.radio("Chart type", ["Seasonality", "Timeline"], horizontal=True, index=0)
 
+    # Always run — sets visibility:hidden on Map, restores it otherwise (Streamlit reuses DOM nodes)
+    _vis = "hidden" if chart_mode == "Map" else "visible"
+    components.html(f"""
+        <script>
+        (function apply() {{
+            var sidebar = window.parent.document.querySelector('[data-testid="stSidebar"]');
+            if (!sidebar) {{ setTimeout(apply, 50); return; }}
+            var radios = sidebar.querySelectorAll('[data-testid="stRadio"]');
+            if (radios.length < 3) {{ setTimeout(apply, 50); return; }}
+            radios[1].style.visibility = '{_vis}';
+            radios[2].style.visibility = '{_vis}';
+        }})();
+        </script>
+    """, height=0)
+
     if chart_mode == "Map":
         event_choice = "Both"
         chart_type = None
-        # Hide the two radios above while keeping their space (visibility:hidden preserves layout)
-        components.html("""
-            <script>
-            (function hide() {
-                var sidebar = window.parent.document.querySelector('[data-testid="stSidebar"]');
-                if (!sidebar) { setTimeout(hide, 50); return; }
-                var radios = sidebar.querySelectorAll('[data-testid="stRadio"]');
-                if (radios.length < 3) { setTimeout(hide, 50); return; }
-                radios[1].style.visibility = 'hidden';
-                radios[2].style.visibility = 'hidden';
-            })();
-            </script>
-        """, height=0)
     else:
         chart_type = chart_type_val
     st.sidebar.divider()
