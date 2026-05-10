@@ -72,7 +72,7 @@ _AGGRID_CSS = {
 }
 
 
-def render_aggrid(df: pd.DataFrame, height: int = 400) -> None:
+def render_aggrid(df: pd.DataFrame, height: int = 400, right_align_cols: list = None) -> None:
     """Render a DataFrame as a consistently styled AG Grid table."""
     gb = GridOptionsBuilder.from_dataframe(df)
     gb.configure_default_column(
@@ -83,6 +83,12 @@ def render_aggrid(df: pd.DataFrame, height: int = 400) -> None:
         autoHeaderHeight=True,
     )
     gb.configure_grid_options(rowHeight=32)
+    for col in (right_align_cols or []):
+        gb.configure_column(
+            col,
+            cellStyle={"textAlign": "right"},
+            headerClass="ag-right-aligned-header",
+        )
     AgGrid(
         df,
         gridOptions=gb.build(),
@@ -896,7 +902,11 @@ def main() -> None:
                 "Partial":          type_summary["partial"].astype(int),
                 "All Offline":      type_summary["all_offline"].astype(int),
             })
-            render_aggrid(map_display, height=min(400, 40 * len(map_display) + 60))
+            render_aggrid(
+                map_display,
+                height=min(400, 40 * len(map_display) + 60),
+                right_align_cols=list(map_display.columns[1:]),
+            )
 
     elif chart_mode == "Offline Capacity":
         if filtered.empty:
