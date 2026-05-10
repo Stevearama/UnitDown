@@ -137,8 +137,11 @@ def collect_filters(df: pd.DataFrame) -> dict:
     )
     st.sidebar.divider()
 
-    chart_mode = st.sidebar.radio("View", ["Offline Capacity", "Total Capacity"], horizontal=True, index=0)
-    chart_type = st.sidebar.radio("Chart type", ["Seasonality", "Timeline"], horizontal=True, index=0)
+    chart_mode = st.sidebar.radio("View", ["Offline Capacity", "Total Capacity", "Map"], horizontal=True, index=0)
+    if chart_mode != "Map":
+        chart_type = st.sidebar.radio("Chart type", ["Seasonality", "Timeline"], horizontal=True, index=0)
+    else:
+        chart_type = None
     st.sidebar.divider()
 
     available_years = sorted([y for y in df["START_DATE"].dropna().dt.year.unique().astype(int) if y >= 2021])
@@ -380,6 +383,152 @@ def build_timeline_chart(timeline_df: pd.DataFrame, uom: str, y_label: str = "Ca
     return fig
 
 # ---------------------------------------------------------------------------
+# Map helpers
+# ---------------------------------------------------------------------------
+
+_MAP_UNIT_SKIP  = {"YEAR", "EVENT_TYPE", "chart_mode", "chart_type"}
+_MAP_EVENT_SKIP = {"YEAR", "chart_mode", "chart_type"}
+
+
+def _apply_col_filters(df: pd.DataFrame, filters: dict, skip: set) -> pd.DataFrame:
+    """Apply filter selections to df, skipping keys in `skip` or missing from df columns."""
+    for col, selected in filters.items():
+        if col in skip or not selected:
+            continue
+        if col in df.columns:
+            df = df[df[col].isin(selected)]
+    return df
+
+
+def build_map_data(units_df: pd.DataFrame, events_df: pd.DataFrame, filters: dict) -> pd.DataFrame:
+    """
+    Join total capacity (units) with today's active outages (events) per plant.
+    Returns one row per plant with lat/lon, totals, a color key, and hover text.
+    """
+    today = pd.Timestamp.today().normalize()
+
+    # Active units matching filters (year and event_type irrelevant for units)
+    active_units = _apply_col_filters(units_df.copy(), filters, skip=_MAP_UNIT_SKIP)
+    active_units = active_units[
+        active_units["END_DATE"].isna() | (active_units["END_DATE"] >= today)
+    ].dropna(subset=["LATITUDE", "LONGITUDE"])
+
+    # Events active today matching filters (year ignored — map always shows today)
+    active_events = _apply_col_filters(events_df.copy(), filters, skip=_MAP_EVENT_SKIP)
+    active_events = active_events[
+        (active_events["START_DATE"] <= today) & (active_events["END_DATE"] >= today)
+    ]
+
+    if active_units.empty:
+        return pd.DataFrame()
+
+    # Capacity per plant + unit type (from units)
+    unit_by_type = (
+        active_units
+        .groupby(
+            ["PLANT_ID", "PLANT_NAME", "OWNER_NAME", "LATITUDE", "LONGITUDE", "UTYPE_DESC"],
+            as_index=False,
+        )["U_CAPACITY"].sum()
+    )
+
+    # Offline capacity per plant + unit type (from events)
+    if active_events.empty:
+        offline_by_type = pd.DataFrame(columns=["PLANT_ID", "UTYPE_DESC", "CAP_OFFLINE"])
+    else:
+        offline_by_type = (
+            active_events
+            .groupby(["PLANT_ID", "UTYPE_DESC"], as_index=False)["CAP_OFFLINE"].sum()
+        )
+
+    merged = unit_by_type.merge(offline_by_type, on=["PLANT_ID", "UTYPE_DESC"], how="left")
+    merged["CAP_OFFLINE"] = merged["CAP_OFFLINE"].fillna(0)
+
+    # Plant-level totals
+    plant_totals = (
+        merged
+        .groupby(["PLANT_ID", "PLANT_NAME", "OWNER_NAME", "LATITUDE", "LONGITUDE"], as_index=False)
+        .agg(total_capacity=("U_CAPACITY", "sum"), total_offline=("CAP_OFFLINE", "sum"))
+    )
+
+    def _color(row):
+        if row["total_offline"] == 0:
+            return "green"
+        if row["total_capacity"] > 0 and row["total_offline"] >= row["total_capacity"]:
+            return "red"
+        return "orange"
+
+    plant_totals["color"] = plant_totals.apply(_color, axis=1)
+
+    # Hover text: one line per unit type
+    merged["_line"] = (
+        "&nbsp;&nbsp;" + merged["UTYPE_DESC"]
+        + ": " + merged["U_CAPACITY"].map("{:,.0f}".format) + " kbd capacity"
+        + ", " + merged["CAP_OFFLINE"].map("{:,.0f}".format) + " kbd offline"
+    )
+    type_lines = (
+        merged.sort_values(["PLANT_ID", "UTYPE_DESC"])
+        .groupby("PLANT_ID")["_line"]
+        .apply("<br>".join)
+        .reset_index(name="type_detail")
+    )
+
+    plant_totals = plant_totals.merge(type_lines, on="PLANT_ID", how="left")
+    plant_totals["hover_text"] = (
+        "<b>" + plant_totals["PLANT_NAME"] + "</b> (" + plant_totals["OWNER_NAME"] + ")<br>"
+        + plant_totals["type_detail"]
+        + "<br><b>Total: " + plant_totals["total_capacity"].map("{:,.0f}".format)
+        + " kbd | " + plant_totals["total_offline"].map("{:,.0f}".format) + " kbd offline</b>"
+    )
+
+    return plant_totals
+
+
+def build_map_chart(map_data: pd.DataFrame) -> go.Figure:
+    """Build a Plotly Scattermapbox with green/orange/red plant dots."""
+    _DOT_COLORS = {"green": "#2E7D32", "orange": "#E65C00", "red": "#CC0000"}
+    _DOT_LABELS = {"green": "No outage", "orange": "Partial outage", "red": "All offline"}
+
+    fig = go.Figure()
+
+    for key in ("red", "orange", "green"):
+        subset = map_data[map_data["color"] == key]
+        if subset.empty:
+            continue
+        fig.add_trace(go.Scattermapbox(
+            lat=subset["LATITUDE"],
+            lon=subset["LONGITUDE"],
+            mode="markers",
+            marker=dict(size=10, color=_DOT_COLORS[key]),
+            text=subset["hover_text"],
+            hoverinfo="text",
+            name=_DOT_LABELS[key],
+        ))
+
+    fig.update_layout(
+        mapbox=dict(
+            style="open-street-map",
+            center=dict(lat=map_data["LATITUDE"].mean(), lon=map_data["LONGITUDE"].mean()),
+            zoom=2,
+        ),
+        height=600,
+        margin=dict(l=0, r=0, t=0, b=0),
+        legend=dict(
+            orientation="v",
+            x=0.01,
+            y=0.99,
+            bgcolor="rgba(255,255,255,0.85)",
+            bordercolor="#CCCCCC",
+            borderwidth=1,
+            font=dict(size=12, color="#000000"),
+        ),
+        plot_bgcolor="white",
+        paper_bgcolor="white",
+    )
+
+    return fig
+
+
+# ---------------------------------------------------------------------------
 # Event subset helpers
 # ---------------------------------------------------------------------------
 
@@ -583,12 +732,30 @@ def main() -> None:
 
     if chart_mode == "Offline Capacity":
         render_header("Offline Capacity Monitor", "Daily capacity offline by season and year")
-    else:
+    elif chart_mode == "Total Capacity":
         render_header("Total Capacity Monitor", "Total installed capacity by unit type and year")
+    else:
+        render_header("Refinery Map", "Current outage status by plant — as of today")
 
     filtered = apply_filters(df.copy(), filters)
+    filtered_units = pd.DataFrame()
 
-    if chart_mode == "Offline Capacity":
+    if chart_mode == "Map":
+        units_df = get_capacity_data()
+        map_data = build_map_data(units_df, df, filters)
+        if map_data.empty:
+            st.warning("No plants with location data match the selected filters.")
+        else:
+            n_green  = int((map_data["color"] == "green").sum())
+            n_orange = int((map_data["color"] == "orange").sum())
+            n_red    = int((map_data["color"] == "red").sum())
+            c1, c2, c3 = st.columns(3)
+            c1.metric("No outage",      f"{n_green:,}")
+            c2.metric("Partial outage", f"{n_orange:,}")
+            c3.metric("All offline",    f"{n_red:,}")
+            st.plotly_chart(build_map_chart(map_data), use_container_width=True)
+
+    elif chart_mode == "Offline Capacity":
         if filtered.empty:
             st.warning("No events match the selected filters.")
         else:
@@ -606,7 +773,8 @@ def main() -> None:
                 data = build_timeline_data(filtered, years=filters["YEAR"] or None)
                 fig = build_timeline_chart(data, uom, y_label="Capacity Offline")
             st.plotly_chart(fig)
-    else:
+
+    else:  # Total Capacity
         units_df = get_capacity_data()
         filtered_units = apply_filters(units_df.copy(), filters)
         if filtered_units.empty:
@@ -627,37 +795,38 @@ def main() -> None:
                 fig = build_timeline_chart(data, uom, y_label="Total Capacity")
             st.plotly_chart(fig)
 
-    st.markdown("---")
+    if chart_mode != "Map":
+        st.markdown("---")
 
-    if chart_mode == "Total Capacity":
-        render_capacity_tables(filtered_units, filters)
-    else:
-        tab_active, tab_starts, tab_ends, tab_all = st.tabs([
-            "Active Now",
-            "Started — Last 10 Days",
-            "Ended — Last 10 Days",
-            "All Events",
-        ])
+        if chart_mode == "Total Capacity":
+            render_capacity_tables(filtered_units, filters)
+        else:
+            tab_active, tab_starts, tab_ends, tab_all = st.tabs([
+                "Active Now",
+                "Started — Last 10 Days",
+                "Ended — Last 10 Days",
+                "All Events",
+            ])
 
-        with tab_active:
-            render_table(get_active_events(filtered), "No currently active events for this selection.")
+            with tab_active:
+                render_table(get_active_events(filtered), "No currently active events for this selection.")
 
-        with tab_starts:
-            render_table(get_recent_starts(filtered), "No events started in the last 10 days.")
+            with tab_starts:
+                render_table(get_recent_starts(filtered), "No events started in the last 10 days.")
 
-        with tab_ends:
-            render_table(get_recent_ends(filtered), "No events ended in the last 10 days.")
+            with tab_ends:
+                render_table(get_recent_ends(filtered), "No events ended in the last 10 days.")
 
-        with tab_all:
-            sel_date = st.date_input("Filter to date (optional)", value=None, key="all_events_date")
-            if sel_date is None:
-                render_table(filtered, "No events match the selected filters.")
-            else:
-                sel_ts = pd.Timestamp(sel_date)
-                events_on_date = filtered[
-                    (filtered["START_DATE"] <= sel_ts) & (filtered["END_DATE"] >= sel_ts)
-                ]
-                render_table(events_on_date, "No active events for this date.")
+            with tab_all:
+                sel_date = st.date_input("Filter to date (optional)", value=None, key="all_events_date")
+                if sel_date is None:
+                    render_table(filtered, "No events match the selected filters.")
+                else:
+                    sel_ts = pd.Timestamp(sel_date)
+                    events_on_date = filtered[
+                        (filtered["START_DATE"] <= sel_ts) & (filtered["END_DATE"] >= sel_ts)
+                    ]
+                    render_table(events_on_date, "No active events for this date.")
 
 
 
