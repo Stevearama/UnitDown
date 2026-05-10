@@ -831,6 +831,8 @@ def main() -> None:
             center = st.session_state.get("map_center", {"lat": float(map_data["LATITUDE"].mean()), "lon": float(map_data["LONGITUDE"].mean())})
             zoom   = st.session_state.get("map_zoom", 2.0)
 
+            st.plotly_chart(build_map_chart(map_data, center, zoom), use_container_width=True, config={"scrollZoom": True})
+
             _LABEL  = "font-size:1rem; font-weight:600; color:#000000; margin:0 0 2px 0;"
             _VALUE  = "font-size:0.75rem; color:#555555; margin:0 0 6px 0;"
             _COL_W  = [1.2, 1, 1, 1, 0.7, 0.7, 0.7]
@@ -862,7 +864,6 @@ def main() -> None:
                 ]
                 for col, v in zip(st.columns(_COL_W), vals):
                     col.markdown(f"<p style='{_VALUE}'>{v}</p>", unsafe_allow_html=True)
-            st.plotly_chart(build_map_chart(map_data, center, zoom), use_container_width=True, config={"scrollZoom": True})
 
     elif chart_mode == "Offline Capacity":
         if filtered.empty:
