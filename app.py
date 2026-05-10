@@ -483,7 +483,36 @@ def build_map_data(units_df: pd.DataFrame, events_df: pd.DataFrame, filters: dic
         + plant_totals["type_detail"]
     )
 
-    return plant_totals
+    # Per-unit-type summary for the metrics header
+    type_cap = (
+        merged.groupby("UTYPE_DESC", as_index=False)
+        .agg(total_capacity=("U_CAPACITY", "sum"), total_offline=("CAP_OFFLINE", "sum"))
+    )
+    type_cap["available"] = type_cap["total_capacity"] - type_cap["total_offline"]
+
+    plant_type = (
+        merged.groupby(["UTYPE_DESC", "PLANT_ID"], as_index=False)
+        .agg(cap=("U_CAPACITY", "sum"), offline=("CAP_OFFLINE", "sum"))
+    )
+    plant_type["_status"] = plant_type.apply(
+        lambda r: "green" if r["offline"] == 0 else ("red" if r["offline"] >= r["cap"] else "orange"),
+        axis=1,
+    )
+    status_counts = (
+        plant_type.groupby(["UTYPE_DESC", "_status"])
+        .size()
+        .unstack(fill_value=0)
+        .reindex(columns=["green", "orange", "red"], fill_value=0)
+        .reset_index()
+        .rename(columns={"green": "no_outage", "orange": "partial", "red": "all_offline"})
+    )
+    type_summary = type_cap.merge(status_counts, on="UTYPE_DESC", how="left").fillna(0)
+    type_summary[["no_outage", "partial", "all_offline"]] = (
+        type_summary[["no_outage", "partial", "all_offline"]].astype(int)
+    )
+    type_summary = type_summary.sort_values("UTYPE_DESC").reset_index(drop=True)
+
+    return plant_totals, type_summary
 
 
 def _fit_bounds(lats: pd.Series, lons: pd.Series) -> tuple:
@@ -767,7 +796,7 @@ def main() -> None:
 
     if chart_mode == "Map":
         units_df = get_capacity_data()
-        map_data = build_map_data(units_df, df, filters)
+        map_data, type_summary = build_map_data(units_df, df, filters)
         if map_data.empty:
             st.warning("No plants with location data match the selected filters.")
         else:
@@ -802,19 +831,29 @@ def main() -> None:
             center = st.session_state.get("map_center", {"lat": float(map_data["LATITUDE"].mean()), "lon": float(map_data["LONGITUDE"].mean())})
             zoom   = st.session_state.get("map_zoom", 2.0)
 
-            total_cap  = map_data["total_capacity"].sum()
-            down_cap   = map_data["total_offline"].sum()
-            avail_cap  = total_cap - down_cap
-            n_green    = int((map_data["color"] == "green").sum())
-            n_orange   = int((map_data["color"] == "orange").sum())
-            n_red      = int((map_data["color"] == "red").sum())
-            c1, c2, c3, c4, c5, c6 = st.columns(6)
-            c1.metric("Total Capacity",     f"{total_cap:,.0f} kbd")
-            c2.metric("Available Capacity", f"{avail_cap:,.0f} kbd")
-            c3.metric("Down Capacity",      f"{down_cap:,.0f} kbd")
-            c4.metric("No Outage",          f"{n_green:,} plants")
-            c5.metric("Partial Outage",     f"{n_orange:,} plants")
-            c6.metric("All Offline",        f"{n_red:,} plants")
+            display = type_summary.rename(columns={
+                "UTYPE_DESC":       "Unit Type",
+                "total_capacity":   "Total (kbd)",
+                "available":        "Available (kbd)",
+                "total_offline":    "Down (kbd)",
+                "no_outage":        "No Outage",
+                "partial":          "Partial",
+                "all_offline":      "All Offline",
+            })
+            st.dataframe(
+                display,
+                hide_index=True,
+                use_container_width=True,
+                height=35 * (len(display) + 1) + 3,
+                column_config={
+                    "Total (kbd)":     st.column_config.NumberColumn(format="%,.1f"),
+                    "Available (kbd)": st.column_config.NumberColumn(format="%,.1f"),
+                    "Down (kbd)":      st.column_config.NumberColumn(format="%,.1f"),
+                    "No Outage":       st.column_config.NumberColumn(format="%d"),
+                    "Partial":         st.column_config.NumberColumn(format="%d"),
+                    "All Offline":     st.column_config.NumberColumn(format="%d"),
+                },
+            )
             st.plotly_chart(build_map_chart(map_data, center, zoom), use_container_width=True, config={"scrollZoom": True})
 
     elif chart_mode == "Offline Capacity":
