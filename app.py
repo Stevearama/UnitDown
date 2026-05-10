@@ -186,13 +186,15 @@ def collect_filters(df: pd.DataFrame) -> dict:
     st.sidebar.caption("Leave a multiselect empty to include all values.")
 
     chart_mode = st.sidebar.radio("View", ["Offline Capacity", "Total Capacity", "Map"], horizontal=True, index=0)
-    event_choice = st.sidebar.radio(
-        "Event type", ["Planned", "Unplanned", "Both"], horizontal=True, index=2
-    )
     if chart_mode != "Map":
+        event_choice = st.sidebar.radio(
+            "Event type", ["Planned", "Unplanned", "Both"], horizontal=True, index=2
+        )
         chart_type = st.sidebar.radio("Chart type", ["Seasonality", "Timeline"], horizontal=True, index=0)
     else:
+        event_choice = "Both"
         chart_type = None
+        st.sidebar.markdown("<div style='height:120px'></div>", unsafe_allow_html=True)
     st.sidebar.divider()
 
     if chart_mode != "Map":
