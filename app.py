@@ -832,7 +832,7 @@ def main() -> None:
             zoom   = st.session_state.get("map_zoom", 2.0)
 
             _LABEL  = "font-size:1rem; font-weight:600; color:#000000; margin:0 0 2px 0;"
-            _VALUE  = "font-size:0.75rem; color:#555555; margin:0 0 12px 0;"
+            _VALUE  = "font-size:0.75rem; color:#555555; margin:0 0 6px 0;"
             _COL_W  = [1.2, 1, 1, 1, 0.7, 0.7, 0.7]
             _HDRS   = ["Unit Type", "Total Capacity (kbd)", "Available Capacity (kbd)",
                        "Down Capacity (kbd)", "No Outage", "Partial Outage", "All Offline"]
