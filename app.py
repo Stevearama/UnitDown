@@ -510,7 +510,7 @@ def build_map_data(units_df: pd.DataFrame, events_df: pd.DataFrame, filters: dic
     type_summary[["no_outage", "partial", "all_offline"]] = (
         type_summary[["no_outage", "partial", "all_offline"]].astype(int)
     )
-    type_summary = type_summary.sort_values("UTYPE_DESC").reset_index(drop=True)
+    type_summary = type_summary.sort_values("total_capacity", ascending=False).reset_index(drop=True)
 
     return plant_totals, type_summary
 
