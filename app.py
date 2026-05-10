@@ -187,7 +187,7 @@ def collect_filters(df: pd.DataFrame) -> dict:
 
     chart_mode = st.sidebar.radio("View", ["Offline Capacity", "Total Capacity", "Map"], horizontal=True, index=0)
     event_choice = st.sidebar.radio("Event type", ["Planned", "Unplanned", "Both"], horizontal=True, index=2)
-    chart_type_val = st.sidebar.radio("Chart type", ["Seasonality", "Timeline", "Timeline Stacked"], horizontal=True, index=0)
+    chart_type_val = st.sidebar.radio("Chart type", ["Seasonality", "Timeline", "Stacked Timeline"], horizontal=True, index=0)
 
     # Event type: only relevant for Offline Capacity
     # Chart type: not relevant for Map
@@ -483,6 +483,11 @@ def build_stacked_timeline_chart(timeline_df: pd.DataFrame, uom: str, y_label: s
     x_min = timeline_df["date"].min()
     x_max = timeline_df["date"].max()
 
+    def _to_rgba(hex_color: str, alpha: float) -> str:
+        h = hex_color.lstrip("#")
+        r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
+        return f"rgba({r},{g},{b},{alpha})"
+
     fig = go.Figure()
     for i, utype in enumerate(sorted_utypes):
         data = timeline_df[timeline_df["UTYPE_DESC"] == utype].sort_values("date")
@@ -494,7 +499,7 @@ def build_stacked_timeline_chart(timeline_df: pd.DataFrame, uom: str, y_label: s
             name=utype,
             stackgroup="one",
             line=dict(width=0.5, color=color),
-            fillcolor=color,
+            fillcolor=_to_rgba(color, 0.5),
             hovertemplate="%{x|%d %b %Y} · %{y:,.0f} " + uom + "<extra>" + utype + "</extra>",
         ))
 
@@ -1014,7 +1019,7 @@ def main() -> None:
             if chart_type == "Seasonality":
                 data = build_seasonality_data(filtered, years=filters["YEAR"] or None)
                 fig = build_chart(data, uom, y_label="Capacity Offline")
-            elif chart_type == "Timeline Stacked":
+            elif chart_type == "Stacked Timeline":
                 data = build_timeline_data(filtered, years=filters["YEAR"] or None)
                 fig = build_stacked_timeline_chart(data, uom, y_label="Capacity Offline")
             else:
@@ -1038,7 +1043,7 @@ def main() -> None:
             if chart_type == "Seasonality":
                 data = build_capacity_data(filtered_units, years=filters["YEAR"] or None)
                 fig = build_chart(data, uom, y_label="Total Capacity")
-            elif chart_type == "Timeline Stacked":
+            elif chart_type == "Stacked Timeline":
                 data = build_capacity_timeline_data(filtered_units, years=filters["YEAR"] or None)
                 fig = build_stacked_timeline_chart(data, uom, y_label="Total Capacity")
             else:
