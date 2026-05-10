@@ -186,26 +186,27 @@ def collect_filters(df: pd.DataFrame) -> dict:
     st.sidebar.header("Filters")
     st.sidebar.caption("Leave a multiselect empty to include all values.")
 
+    chart_mode = st.sidebar.radio("View", ["Offline Capacity", "Total Capacity", "Map"], horizontal=True, index=0)
     event_choice = st.sidebar.radio(
         "Event type", ["Planned", "Unplanned", "Both"], horizontal=True, index=2
     )
-    st.sidebar.divider()
-
-    chart_mode = st.sidebar.radio("View", ["Offline Capacity", "Total Capacity", "Map"], horizontal=True, index=0)
     if chart_mode != "Map":
         chart_type = st.sidebar.radio("Chart type", ["Seasonality", "Timeline"], horizontal=True, index=0)
     else:
         chart_type = None
     st.sidebar.divider()
 
-    available_years = sorted([y for y in df["START_DATE"].dropna().dt.year.unique().astype(int) if y >= 2021])
-    cur = pd.Timestamp.today().year
-    default_years = [cur - 3, cur - 2, cur - 1, cur, cur + 1]
-
-    if "year" in st.session_state:
-        st.session_state["year"] = sorted(st.session_state["year"])
-    year = render_multiselect("Year", available_years, "year", default=default_years)
-    df1 = df[df["START_DATE"].dt.year.isin(year)] if year else df
+    if chart_mode != "Map":
+        available_years = sorted([y for y in df["START_DATE"].dropna().dt.year.unique().astype(int) if y >= 2021])
+        cur = pd.Timestamp.today().year
+        default_years = [cur - 3, cur - 2, cur - 1, cur, cur + 1]
+        if "year" in st.session_state:
+            st.session_state["year"] = sorted(st.session_state["year"])
+        year = render_multiselect("Year", available_years, "year", default=default_years)
+        df1 = df[df["START_DATE"].dt.year.isin(year)] if year else df
+    else:
+        year = []
+        df1 = df
 
     world_reg = render_multiselect("World Region", df1["WORLD_REG"].dropna().unique(), "world_reg", default=["North America"])
     df2 = df1[df1["WORLD_REG"].isin(world_reg)] if world_reg else df1
