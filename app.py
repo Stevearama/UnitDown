@@ -187,7 +187,7 @@ def collect_filters(df: pd.DataFrame) -> dict:
 
     chart_mode = st.sidebar.radio("View", ["Offline Capacity", "Total Capacity", "Map"], horizontal=True, index=0)
     event_choice = st.sidebar.radio("Event type", ["Planned", "Unplanned", "Both"], horizontal=True, index=2)
-    chart_type_val = st.sidebar.radio("Chart type", ["Seasonality", "Timeline"], horizontal=True, index=0)
+    chart_type_val = st.sidebar.radio("Chart type", ["Seasonality", "Timeline", "Timeline Stacked"], horizontal=True, index=0)
 
     # Event type: only relevant for Offline Capacity
     # Chart type: not relevant for Map
@@ -455,6 +455,96 @@ def build_timeline_chart(timeline_df: pd.DataFrame, uom: str, y_label: str = "Ca
             x=today_str, y=1.05, yref="paper", text="Today",
             showarrow=False, font=dict(size=11, color="#555555"), xanchor="center",
         )
+    return fig
+
+
+def build_stacked_timeline_chart(timeline_df: pd.DataFrame, uom: str, y_label: str = "Capacity") -> go.Figure:
+    """Stacked area timeline — one area per unit type, largest-today at the bottom."""
+    today = pd.Timestamp.today().normalize()
+
+    utypes = timeline_df["UTYPE_DESC"].unique()
+
+    # Value per unit type at (or nearest to) today, to determine stack order
+    today_vals = {}
+    for utype in utypes:
+        data = timeline_df[timeline_df["UTYPE_DESC"] == utype].sort_values("date")
+        if data.empty:
+            today_vals[utype] = 0
+        else:
+            exact = data[data["date"] == today]
+            if not exact.empty:
+                today_vals[utype] = float(exact["CAP_OFFLINE"].iloc[0])
+            else:
+                idx = (data["date"] - today).abs().idxmin()
+                today_vals[utype] = float(data.loc[idx, "CAP_OFFLINE"])
+
+    sorted_utypes = sorted(utypes, key=lambda u: today_vals.get(u, 0), reverse=True)
+
+    x_min = timeline_df["date"].min()
+    x_max = timeline_df["date"].max()
+
+    fig = go.Figure()
+    for i, utype in enumerate(sorted_utypes):
+        data = timeline_df[timeline_df["UTYPE_DESC"] == utype].sort_values("date")
+        color = PALETTE[i % len(PALETTE)]
+        fig.add_trace(go.Scatter(
+            x=data["date"],
+            y=data["CAP_OFFLINE"],
+            mode="lines",
+            name=utype,
+            stackgroup="one",
+            line=dict(width=0.5, color=color),
+            fillcolor=color,
+            hovertemplate="%{x|%d %b %Y} · %{y:,.0f} " + uom + "<extra>" + utype + "</extra>",
+        ))
+
+    fig.update_layout(
+        plot_bgcolor="white",
+        paper_bgcolor="white",
+        font=dict(family="Arial", size=12, color="#000000"),
+        xaxis=dict(
+            range=[x_min, x_max],
+            showgrid=False,
+            showline=True,
+            linecolor="#000000",
+            linewidth=1.5,
+            ticks="outside",
+            ticklen=5,
+            tickfont=dict(color="#000000", size=12),
+        ),
+        yaxis=dict(
+            title=dict(
+                text=f"{y_label} ({uom})" if uom else y_label,
+                font=dict(color="#000000"),
+            ),
+            tickfont=dict(color="#000000"),
+            showgrid=True,
+            gridcolor="#E8E8E8",
+            gridwidth=1,
+            showline=False,
+            zeroline=True,
+            zerolinecolor="#BBBBBB",
+            tickformat=",",
+        ),
+        legend=dict(
+            orientation="h",
+            y=-0.15,
+            x=0,
+            title_text="",
+            font=dict(size=11, color="#000000"),
+        ),
+        margin=dict(l=70, r=20, t=40, b=90),
+        hovermode="x unified",
+    )
+
+    if x_min <= today <= x_max:
+        today_str = today.strftime("%Y-%m-%d")
+        fig.add_vline(x=today_str, line_dash="dash", line_color="#555555", line_width=1.5)
+        fig.add_annotation(
+            x=today_str, y=1.05, yref="paper", text="Today",
+            showarrow=False, font=dict(size=11, color="#555555"), xanchor="center",
+        )
+
     return fig
 
 # ---------------------------------------------------------------------------
@@ -924,6 +1014,9 @@ def main() -> None:
             if chart_type == "Seasonality":
                 data = build_seasonality_data(filtered, years=filters["YEAR"] or None)
                 fig = build_chart(data, uom, y_label="Capacity Offline")
+            elif chart_type == "Timeline Stacked":
+                data = build_timeline_data(filtered, years=filters["YEAR"] or None)
+                fig = build_stacked_timeline_chart(data, uom, y_label="Capacity Offline")
             else:
                 data = build_timeline_data(filtered, years=filters["YEAR"] or None)
                 fig = build_timeline_chart(data, uom, y_label="Capacity Offline")
@@ -945,6 +1038,9 @@ def main() -> None:
             if chart_type == "Seasonality":
                 data = build_capacity_data(filtered_units, years=filters["YEAR"] or None)
                 fig = build_chart(data, uom, y_label="Total Capacity")
+            elif chart_type == "Timeline Stacked":
+                data = build_capacity_timeline_data(filtered_units, years=filters["YEAR"] or None)
+                fig = build_stacked_timeline_chart(data, uom, y_label="Total Capacity")
             else:
                 data = build_capacity_timeline_data(filtered_units, years=filters["YEAR"] or None)
                 fig = build_timeline_chart(data, uom, y_label="Total Capacity")
