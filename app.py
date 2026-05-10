@@ -506,7 +506,7 @@ def build_map_chart(map_data: pd.DataFrame) -> go.Figure:
 
     fig.update_layout(
         mapbox=dict(
-            style="open-street-map",
+            style="carto-positron",
             center=dict(lat=map_data["LATITUDE"].mean(), lon=map_data["LONGITUDE"].mean()),
             zoom=2,
         ),
