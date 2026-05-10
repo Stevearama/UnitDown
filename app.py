@@ -1,5 +1,4 @@
 import math
-import time
 
 import streamlit as st
 import streamlit.components.v1 as components
@@ -864,36 +863,7 @@ def main() -> None:
         if map_data.empty:
             st.warning("No plants with location data match the selected filters.")
         else:
-            # --- Debounced auto-zoom ---
-            # Hash the visible plant IDs so any filter change is detected.
-            current_hash = tuple(sorted(map_data["PLANT_ID"].tolist()))
-            now = time.time()
-            prev_hash    = st.session_state.get("map_filters_hash")
-            last_change  = st.session_state.get("map_filters_changed_at", 0.0)
-
-            if prev_hash is None:
-                # First load — compute bounds immediately.
-                center, zoom = _fit_bounds(map_data["LATITUDE"], map_data["LONGITUDE"])
-                st.session_state["map_filters_hash"]       = current_hash
-                st.session_state["map_filters_changed_at"] = now
-                st.session_state["map_center"]             = center
-                st.session_state["map_zoom"]               = zoom
-            elif prev_hash != current_hash:
-                # Filters just changed — start the debounce timer, keep old view.
-                st.session_state["map_filters_hash"]       = current_hash
-                st.session_state["map_filters_changed_at"] = now
-            elif now - last_change >= 2.0:
-                # Stable for 2 s — zoom to fit the current data.
-                center, zoom = _fit_bounds(map_data["LATITUDE"], map_data["LONGITUDE"])
-                st.session_state["map_center"] = center
-                st.session_state["map_zoom"]   = zoom
-            else:
-                # Still within the debounce window — sleep the remainder then rerun.
-                time.sleep(2.0 - (now - last_change))
-                st.rerun()
-
-            center = st.session_state.get("map_center", {"lat": float(map_data["LATITUDE"].mean()), "lon": float(map_data["LONGITUDE"].mean())})
-            zoom   = st.session_state.get("map_zoom", 2.0)
+            center, zoom = _fit_bounds(map_data["LATITUDE"], map_data["LONGITUDE"])
 
             st.plotly_chart(build_map_chart(map_data, center, zoom), use_container_width=True, config={"scrollZoom": True})
 
