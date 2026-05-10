@@ -753,7 +753,7 @@ def main() -> None:
             c1.metric("No outage",      f"{n_green:,}")
             c2.metric("Partial outage", f"{n_orange:,}")
             c3.metric("All offline",    f"{n_red:,}")
-            st.plotly_chart(build_map_chart(map_data), use_container_width=True)
+            st.plotly_chart(build_map_chart(map_data), use_container_width=True, config={"scrollZoom": True})
 
     elif chart_mode == "Offline Capacity":
         if filtered.empty:
