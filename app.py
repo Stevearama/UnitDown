@@ -712,15 +712,23 @@ def build_map_chart(map_data: pd.DataFrame, center: dict, zoom: float) -> go.Fig
 
     fig = go.Figure()
 
+    # Scale dot size by sqrt of total capacity, clamped to a sensible pixel range
+    dot_sizes = map_data["total_capacity"].pow(0.5).clip(lower=5, upper=35)
+
     for key in ("red", "orange", "green"):
-        subset = map_data[map_data["color"] == key]
+        idx = map_data["color"] == key
+        subset = map_data[idx]
         if subset.empty:
             continue
         fig.add_trace(go.Scattermapbox(
             lat=subset["LATITUDE"],
             lon=subset["LONGITUDE"],
             mode="markers",
-            marker=dict(size=10, color=_DOT_COLORS[key]),
+            marker=dict(
+                size=dot_sizes[idx].tolist(),
+                color=_DOT_COLORS[key],
+                opacity=0.5,
+            ),
             text=subset["hover_text"],
             hoverinfo="text",
             name=_DOT_LABELS[key],
