@@ -831,11 +831,11 @@ def main() -> None:
             center = st.session_state.get("map_center", {"lat": float(map_data["LATITUDE"].mean()), "lon": float(map_data["LONGITUDE"].mean())})
             zoom   = st.session_state.get("map_zoom", 2.0)
 
-            _LABEL  = "font-size:0.75rem; color:#555555; margin:0 0 2px 0;"
-            _VALUE  = "font-size:1rem; font-weight:600; color:#000000; margin:0 0 12px 0;"
+            _LABEL  = "font-size:1rem; font-weight:600; color:#000000; margin:0 0 2px 0;"
+            _VALUE  = "font-size:0.75rem; color:#555555; margin:0 0 12px 0;"
             _COL_W  = [1.2, 1, 1, 1, 0.7, 0.7, 0.7]
-            _HDRS   = ["Unit Type", "Total Capacity", "Available Capacity",
-                       "Down Capacity", "No Outage", "Partial Outage", "All Offline"]
+            _HDRS   = ["Unit Type", "Total Capacity (kbd)", "Available Capacity (kbd)",
+                       "Down Capacity (kbd)", "No Outage", "Partial Outage", "All Offline"]
 
             # Header row
             for col, h in zip(st.columns(_COL_W), _HDRS):
@@ -845,9 +845,9 @@ def main() -> None:
             for _, row in type_summary.iterrows():
                 vals = [
                     row["UTYPE_DESC"],
-                    f"{row['total_capacity']:,.0f} kbd",
-                    f"{row['available']:,.0f} kbd",
-                    f"{row['total_offline']:,.0f} kbd",
+                    f"{row['total_capacity']:,.0f}",
+                    f"{row['available']:,.0f}",
+                    f"{row['total_offline']:,.0f}",
                     f"{int(row['no_outage']):,}",
                     f"{int(row['partial']):,}",
                     f"{int(row['all_offline']):,}",
