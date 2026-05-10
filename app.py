@@ -6,6 +6,8 @@ import streamlit.components.v1 as components
 import plotly.graph_objects as go
 import pandas as pd
 
+from st_aggrid import AgGrid, GridOptionsBuilder
+
 from data_import import load_offline_events
 from chart_data import build_seasonality_data
 from data_import_capacity import load_units
@@ -54,6 +56,40 @@ COLUMN_LABELS = {
 
 # Columns kept in the DataFrame but hidden from every display table
 DISPLAY_HIDDEN = {"UNIT_ID", "PLANT_ID", "U_STATUS", "LATITUDE", "LONGITUDE"}
+
+# ---------------------------------------------------------------------------
+# Shared AG Grid styling
+# ---------------------------------------------------------------------------
+
+_AGGRID_CSS = {
+    ".ag-root-wrapper":      {"border": "none !important"},
+    ".ag-header":            {"border-bottom": "2px solid #E3120B", "background-color": "#ffffff"},
+    ".ag-header-cell-label": {"font-weight": "bold", "font-size": "13px", "color": "#000000"},
+    ".ag-cell":              {"font-size": "13px", "border-right": "none !important"},
+    ".ag-row":               {"border-bottom": "1px solid #f0f0f0"},
+    ".ag-row-odd":           {"background-color": "#fafafa"},
+    ".ag-row-even":          {"background-color": "#ffffff"},
+}
+
+
+def render_aggrid(df: pd.DataFrame, height: int = 400) -> None:
+    """Render a DataFrame as a consistently styled AG Grid table."""
+    gb = GridOptionsBuilder.from_dataframe(df)
+    gb.configure_default_column(
+        sortable=True,
+        filter=True,
+        resizable=True,
+        wrapHeaderText=True,
+        autoHeaderHeight=True,
+    )
+    AgGrid(
+        df,
+        gridOptions=gb.build(),
+        height=height,
+        fit_columns_on_grid_load=True,
+        theme="alpine",
+        custom_css=_AGGRID_CSS,
+    )
 
 # ---------------------------------------------------------------------------
 # Authentication
@@ -679,7 +715,7 @@ def render_capacity_tables(filtered_units: pd.DataFrame, filters: dict) -> None:
         if pivot.empty:
             st.info("No active plants for this selection.")
         else:
-            st.dataframe(pivot, hide_index=True, height=400)
+            render_aggrid(pivot, height=400)
 
     with tab2:
         pivot = build_plant_pivot(closed)
@@ -687,7 +723,7 @@ def render_capacity_tables(filtered_units: pd.DataFrame, filters: dict) -> None:
         if pivot.empty:
             st.info("No closures in the selected years.")
         else:
-            st.dataframe(pivot, hide_index=True, height=400)
+            render_aggrid(pivot, height=400)
 
     with tab3:
         pivot = build_plant_pivot(opened)
@@ -695,7 +731,7 @@ def render_capacity_tables(filtered_units: pd.DataFrame, filters: dict) -> None:
         if pivot.empty:
             st.info("No openings in the selected years.")
         else:
-            st.dataframe(pivot, hide_index=True, height=400)
+            render_aggrid(pivot, height=400)
 
 
 # ---------------------------------------------------------------------------
@@ -717,7 +753,7 @@ def render_table(df: pd.DataFrame, empty_msg: str = "No matching events.") -> No
     if df.empty:
         st.info(empty_msg)
     else:
-        st.dataframe(prepare_display_table(df), height=350, hide_index=True)
+        render_aggrid(prepare_display_table(df), height=400)
 
 # ---------------------------------------------------------------------------
 # Layout helpers
@@ -835,37 +871,21 @@ def main() -> None:
 
             st.plotly_chart(build_map_chart(map_data, center, zoom), use_container_width=True, config={"scrollZoom": True})
 
-            _LABEL  = "font-size:1rem; font-weight:600; color:#000000; margin:0 0 2px 0;"
-            _VALUE  = "font-size:0.75rem; color:#555555; margin:0 0 6px 0;"
-            _COL_W  = [1.2, 1, 1, 1, 0.7, 0.7, 0.7]
-            _HDRS   = ["Unit Type", "Total Capacity (kbd)", "Available Capacity (kbd)",
-                       "Down Capacity (kbd)", "No Outage", "Partial Outage", "All Offline"]
+            def _fmt_pct(val, total):
+                if total <= 0:
+                    return f"{val:,.0f}"
+                return f"{val:,.0f} ({val / total:.0%})"
 
-            # Header row
-            for col, h in zip(st.columns(_COL_W), _HDRS):
-                col.markdown(f"<p style='{_LABEL}'>{h}</p>", unsafe_allow_html=True)
-
-            _PCT = "font-size:0.65rem; color:#999999; margin-left:4px;"
-
-            # One data row per unit type
-            for _, row in type_summary.iterrows():
-                total = row["total_capacity"]
-                def _pct(v):
-                    if total <= 0:
-                        return ""
-                    return f"<span style='{_PCT}'>{v / total:.0%}</span>"
-
-                vals = [
-                    row["UTYPE_DESC"],
-                    f"{total:,.0f}",
-                    f"{row['available']:,.0f}{_pct(row['available'])}",
-                    f"{row['total_offline']:,.0f}{_pct(row['total_offline'])}",
-                    f"{int(row['no_outage']):,}",
-                    f"{int(row['partial']):,}",
-                    f"{int(row['all_offline']):,}",
-                ]
-                for col, v in zip(st.columns(_COL_W), vals):
-                    col.markdown(f"<p style='{_VALUE}'>{v}</p>", unsafe_allow_html=True)
+            map_display = pd.DataFrame({
+                "Unit Type":        type_summary["UTYPE_DESC"],
+                "Total (kbd)":      type_summary["total_capacity"].round(1),
+                "Available (kbd)":  type_summary.apply(lambda r: _fmt_pct(r["available"], r["total_capacity"]), axis=1),
+                "Down (kbd)":       type_summary.apply(lambda r: _fmt_pct(r["total_offline"], r["total_capacity"]), axis=1),
+                "No Outage":        type_summary["no_outage"].astype(int),
+                "Partial":          type_summary["partial"].astype(int),
+                "All Offline":      type_summary["all_offline"].astype(int),
+            })
+            render_aggrid(map_display, height=min(400, 40 * len(map_display) + 60))
 
     elif chart_mode == "Offline Capacity":
         if filtered.empty:
