@@ -802,13 +802,19 @@ def main() -> None:
             center = st.session_state.get("map_center", {"lat": float(map_data["LATITUDE"].mean()), "lon": float(map_data["LONGITUDE"].mean())})
             zoom   = st.session_state.get("map_zoom", 2.0)
 
-            n_green  = int((map_data["color"] == "green").sum())
-            n_orange = int((map_data["color"] == "orange").sum())
-            n_red    = int((map_data["color"] == "red").sum())
-            c1, c2, c3 = st.columns(3)
-            c1.metric("No outage",      f"{n_green:,}")
-            c2.metric("Partial outage", f"{n_orange:,}")
-            c3.metric("All offline",    f"{n_red:,}")
+            total_cap  = map_data["total_capacity"].sum()
+            down_cap   = map_data["total_offline"].sum()
+            avail_cap  = total_cap - down_cap
+            n_green    = int((map_data["color"] == "green").sum())
+            n_orange   = int((map_data["color"] == "orange").sum())
+            n_red      = int((map_data["color"] == "red").sum())
+            c1, c2, c3, c4, c5, c6 = st.columns(6)
+            c1.metric("Total Capacity",     f"{total_cap:,.0f} kbd")
+            c2.metric("Available Capacity", f"{avail_cap:,.0f} kbd")
+            c3.metric("Down Capacity",      f"{down_cap:,.0f} kbd")
+            c4.metric("No Outage",          f"{n_green:,} plants")
+            c5.metric("Partial Outage",     f"{n_orange:,} plants")
+            c6.metric("All Offline",        f"{n_red:,} plants")
             st.plotly_chart(build_map_chart(map_data, center, zoom), use_container_width=True, config={"scrollZoom": True})
 
     elif chart_mode == "Offline Capacity":
