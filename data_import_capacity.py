@@ -124,6 +124,16 @@ def load_units(filepath: str = "units.csv") -> pd.DataFrame:
     df["UTYPE_DESC"] = df["UTYPE_DESC"].replace(RENAME_UNIT_TYPE)
     df = df[df["UTYPE_DESC"] != "REMOVE"]
     df["PADD_REG"] = df["PADD_REG"].replace(PADD_RENAME)
-    df.loc[df["CAP_UOM"] == "BBL/d", "U_CAPACITY"] /= 1000
-    df["CAP_UOM"] = df["CAP_UOM"].replace("BBL/d", "kbd")
+    bbl_mask = df["CAP_UOM"] == "BBL/d"
+    tyr_mask = df["CAP_UOM"] == "Metric T/yr"
+
+    df.loc[bbl_mask, "U_CAPACITY"] /= 1000
+    df.loc[bbl_mask, "CAP_UOM"]    = "kbd"
+
+    df.loc[tyr_mask, "U_CAPACITY"] = df.loc[tyr_mask, "U_CAPACITY"] * 7 / (1000 * 365)
+    df.loc[tyr_mask, "CAP_UOM"]    = "kbd"
+
+    # Strip UOMs that cannot be meaningfully converted to kbd.
+    _STRIP = {"Gallons/yr", "k cubic ft/day", "M Lbs/yr", "MMSCFD"}
+    df = df[~df["CAP_UOM"].isin(_STRIP)]
     return df

@@ -106,6 +106,7 @@ def load_offline_events(filepath: str = "Offline Event.csv") -> pd.DataFrame:
     df = rename_padd_regions(df)
     bbl_mask = (df["CAP_UOM"] == "BBL/d") | df["CAP_UOM"].isna()
     td_mask  = df["CAP_UOM"] == "T/d"
+    tyr_mask = df["CAP_UOM"] == "Metric T/yr"
 
     df.loc[bbl_mask, "CAP_OFFLINE"] /= 1000
     df.loc[bbl_mask, "U_CAPACITY"]  /= 1000
@@ -115,5 +116,10 @@ def load_offline_events(filepath: str = "Offline Event.csv") -> pd.DataFrame:
     df.loc[td_mask, "U_CAPACITY"]  = df.loc[td_mask, "U_CAPACITY"]  * 7 / 1000
     df.loc[td_mask, "CAP_UOM"]     = "kbd"
 
+    df.loc[tyr_mask, "CAP_OFFLINE"] = df.loc[tyr_mask, "CAP_OFFLINE"] * 7 / (1000 * 365)
+    df.loc[tyr_mask, "U_CAPACITY"]  = df.loc[tyr_mask, "U_CAPACITY"]  * 7 / (1000 * 365)
+    df.loc[tyr_mask, "CAP_UOM"]     = "kbd"
+
+    # Keep only rows successfully converted to kbd; strip everything else.
     df = df[df["CAP_UOM"] == "kbd"]
     return df
