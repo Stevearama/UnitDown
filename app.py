@@ -186,15 +186,27 @@ def collect_filters(df: pd.DataFrame) -> dict:
     st.sidebar.caption("Leave a multiselect empty to include all values.")
 
     chart_mode = st.sidebar.radio("View", ["Offline Capacity", "Total Capacity", "Map"], horizontal=True, index=0)
-    if chart_mode != "Map":
-        event_choice = st.sidebar.radio(
-            "Event type", ["Planned", "Unplanned", "Both"], horizontal=True, index=2
-        )
-        chart_type = st.sidebar.radio("Chart type", ["Seasonality", "Timeline"], horizontal=True, index=0)
-    else:
+    event_choice = st.sidebar.radio("Event type", ["Planned", "Unplanned", "Both"], horizontal=True, index=2)
+    chart_type_val = st.sidebar.radio("Chart type", ["Seasonality", "Timeline"], horizontal=True, index=0)
+
+    if chart_mode == "Map":
         event_choice = "Both"
         chart_type = None
-        st.sidebar.markdown("<div style='height:120px'></div>", unsafe_allow_html=True)
+        # Hide the two radios above while keeping their space (visibility:hidden preserves layout)
+        components.html("""
+            <script>
+            (function hide() {
+                var sidebar = window.parent.document.querySelector('[data-testid="stSidebar"]');
+                if (!sidebar) { setTimeout(hide, 50); return; }
+                var radios = sidebar.querySelectorAll('[data-testid="stRadio"]');
+                if (radios.length < 3) { setTimeout(hide, 50); return; }
+                radios[1].style.visibility = 'hidden';
+                radios[2].style.visibility = 'hidden';
+            })();
+            </script>
+        """, height=0)
+    else:
+        chart_type = chart_type_val
     st.sidebar.divider()
 
     if chart_mode != "Map":
