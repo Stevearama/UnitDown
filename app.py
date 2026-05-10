@@ -39,8 +39,8 @@ COLUMN_LABELS = {
     "MARKET_REG":         "Market Region",
     "WORLD_REG":          "World Region",
     "U_STATUS":           "Status",
-    "U_CAPACITY":         "Unit Capacity",
-    "CAP_OFFLINE":        "Capacity Offline",
+    "U_CAPACITY":         "Unit Capacity (kbd)",
+    "CAP_OFFLINE":        "Capacity Offline (kbd)",
     "CAP_UOM":            "Unit of Measure",
     "DERATE":             "Derate (%)",
     "START_DATE":         "Start Date",
@@ -55,7 +55,7 @@ COLUMN_LABELS = {
 }
 
 # Columns kept in the DataFrame but hidden from every display table
-DISPLAY_HIDDEN = {"UNIT_ID", "PLANT_ID", "U_STATUS", "LATITUDE", "LONGITUDE"}
+DISPLAY_HIDDEN = {"UNIT_ID", "PLANT_ID", "U_STATUS", "LATITUDE", "LONGITUDE", "CAP_UOM", "E_STATUS_RESEARCH"}
 
 # ---------------------------------------------------------------------------
 # Shared AG Grid styling
@@ -66,8 +66,8 @@ _AGGRID_CSS = {
     ".ag-header":            {"border-bottom": "2px solid #E3120B", "background-color": "#ffffff"},
     ".ag-header-cell-label": {"font-weight": "bold", "font-size": "13px", "color": "#000000"},
     ".ag-cell":              {"font-size": "13px", "border-right": "none !important"},
-    ".ag-row":               {"border-bottom": "1px solid #f0f0f0"},
-    ".ag-row-odd":           {"background-color": "#fafafa"},
+    ".ag-row":               {"border-bottom": "1px solid #f0f0f0", "background-color": "#ffffff"},
+    ".ag-row-odd":           {"background-color": "#ffffff"},
     ".ag-row-even":          {"background-color": "#ffffff"},
 }
 
@@ -82,6 +82,7 @@ def render_aggrid(df: pd.DataFrame, height: int = 400) -> None:
         wrapHeaderText=True,
         autoHeaderHeight=True,
     )
+    gb.configure_grid_options(rowHeight=32)
     AgGrid(
         df,
         gridOptions=gb.build(),
@@ -928,8 +929,6 @@ def main() -> None:
             st.plotly_chart(fig)
 
     if chart_mode != "Map":
-        st.markdown("---")
-
         if chart_mode == "Total Capacity":
             render_capacity_tables(filtered_units, filters)
         else:
