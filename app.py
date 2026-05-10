@@ -831,29 +831,22 @@ def main() -> None:
             center = st.session_state.get("map_center", {"lat": float(map_data["LATITUDE"].mean()), "lon": float(map_data["LONGITUDE"].mean())})
             zoom   = st.session_state.get("map_zoom", 2.0)
 
-            display = type_summary.rename(columns={
-                "UTYPE_DESC":       "Unit Type",
-                "total_capacity":   "Total (kbd)",
-                "available":        "Available (kbd)",
-                "total_offline":    "Down (kbd)",
-                "no_outage":        "No Outage",
-                "partial":          "Partial",
-                "all_offline":      "All Offline",
-            })
-            st.dataframe(
-                display,
-                hide_index=True,
-                use_container_width=True,
-                height=35 * (len(display) + 1) + 3,
-                column_config={
-                    "Total (kbd)":     st.column_config.NumberColumn(format="%,.1f"),
-                    "Available (kbd)": st.column_config.NumberColumn(format="%,.1f"),
-                    "Down (kbd)":      st.column_config.NumberColumn(format="%,.1f"),
-                    "No Outage":       st.column_config.NumberColumn(format="%d"),
-                    "Partial":         st.column_config.NumberColumn(format="%d"),
-                    "All Offline":     st.column_config.NumberColumn(format="%d"),
-                },
-            )
+            st.markdown("""
+                <style>
+                [data-testid="stMetric"] label { font-size: 0.75rem; }
+                [data-testid="stMetric"] [data-testid="stMetricValue"] { font-size: 1rem; }
+                </style>
+            """, unsafe_allow_html=True)
+
+            for _, row in type_summary.iterrows():
+                st.caption(row["UTYPE_DESC"])
+                c1, c2, c3, c4, c5, c6 = st.columns(6)
+                c1.metric("Total Capacity",     f"{row['total_capacity']:,.0f} kbd")
+                c2.metric("Available Capacity", f"{row['available']:,.0f} kbd")
+                c3.metric("Down Capacity",      f"{row['total_offline']:,.0f} kbd")
+                c4.metric("No Outage",          f"{int(row['no_outage']):,} plants")
+                c5.metric("Partial Outage",     f"{int(row['partial']):,} plants")
+                c6.metric("All Offline",        f"{int(row['all_offline']):,} plants")
             st.plotly_chart(build_map_chart(map_data, center, zoom), use_container_width=True, config={"scrollZoom": True})
 
     elif chart_mode == "Offline Capacity":
