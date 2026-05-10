@@ -730,18 +730,26 @@ def build_map_chart(map_data: pd.DataFrame, center: dict, zoom: float) -> go.Fig
         subset = map_data[idx]
         if subset.empty:
             continue
+        # Data trace — variable sizes, excluded from legend
         fig.add_trace(go.Scattermapbox(
             lat=subset["LATITUDE"],
             lon=subset["LONGITUDE"],
             mode="markers",
-            marker=dict(
-                size=dot_sizes[idx].tolist(),
-                color=_DOT_COLORS[key],
-                opacity=0.5,
-            ),
+            marker=dict(size=dot_sizes[idx].tolist(), color=_DOT_COLORS[key], opacity=0.5),
             text=subset["hover_text"],
             hoverinfo="text",
+            legendgroup=key,
+            showlegend=False,
+        ))
+        # Legend-only trace — fixed size so all legend dots look the same
+        fig.add_trace(go.Scattermapbox(
+            lat=[None],
+            lon=[None],
+            mode="markers",
+            marker=dict(size=10, color=_DOT_COLORS[key], opacity=0.5),
             name=_DOT_LABELS[key],
+            legendgroup=key,
+            showlegend=True,
         ))
 
     fig.update_layout(
