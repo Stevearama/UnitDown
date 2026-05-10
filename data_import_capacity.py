@@ -9,8 +9,8 @@ KEEP_COLS = [
     "LATITUDE", "LONGITUDE",
 ]
 
-EXCLUDE_ALWAYS      = {"Cancelled"}
-REQUIRE_STARTUP     = {"On Hold", "Under Construction", "Planned", "Engineered"}
+EXCLUDE_ALWAYS      = {"Cancelled", "On Hold"}
+REQUIRE_STARTUP     = {"Under Construction", "Planned", "Engineered"}
 REQUIRE_EITHER_DATE = {"Closed", "Mothballed", "Removed", "Shuttered"}
 
 COLUMN_RENAME = {
