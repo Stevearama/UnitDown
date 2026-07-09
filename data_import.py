@@ -29,7 +29,10 @@ def rename_padd_regions(df: pd.DataFrame) -> pd.DataFrame:
 
 def load_offline_events(filepath: str = "Offline Event.csv") -> pd.DataFrame:
     """Read the offline events CSV, keep relevant columns, clean unit types, and parse dates."""
-    df = pd.read_csv(filepath, usecols=KEEP_COLS, low_memory=False)
+    with open(filepath, encoding="utf-8-sig", errors="replace") as f:
+        first_line = f.readline()
+    skiprows = 1 if first_line.startswith("sep=") else 0
+    df = pd.read_csv(filepath, usecols=KEEP_COLS, low_memory=False, skiprows=skiprows)
     for col in DATE_COLS:
         df[col] = pd.to_datetime(df[col], format="%d-%b-%Y", errors="coerce")
     df = apply_unit_type_mapping(df)
